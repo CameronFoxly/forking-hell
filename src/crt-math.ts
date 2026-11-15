@@ -11,18 +11,17 @@ export function monitorUniforms(config: Tuning['crt'], view: EffectView) {
   }
   const density = view.height / view.cssHeight;
   const optical = config.opticalEnabled ? (view.mobile ? config.opticalMobile : config.opticalDesktop) : 0;
-  return {
-    active: !!config.enabled && !!(config.scanlinesEnabled * config.scanlineStrength ||
-      config.glowEnabled * config.glowStrength || config.curvatureEnabled * config.curvature || optical),
+  const uniforms = {
     resolution: [view.width, view.height], cssSize: [view.cssWidth, view.cssHeight],
     optical: view.reducedMotion ? Math.min(optical, 0.25) : optical,
-    scanline: config.scanlinesEnabled ? config.scanlineStrength * (view.reducedMotion ? 0.5 : 1) : 0,
-    scanPeriod: Math.max(3, Math.round(config.scanlinePeriod * density)),
-    glow: config.glowEnabled ? Math.min(config.glowStrength, view.reducedMotion ? 0.08 : 0.25) : 0,
-    glowRadius: Math.min(view.worldPixelPitch * config.glowRadius, density * 3),
+    scanline: config.scanlinesEnabled ? (view.reducedMotion ? Math.min(config.scanlineStrength * 0.5, 0.125) : config.scanlineStrength) : 0,
+    scanPeriod: Math.max(2, Math.round(config.scanlinePeriod * density)),
+    glow: config.glowEnabled && config.glowThreshold < 1 ? (view.reducedMotion ? Math.min(config.glowStrength, 0.08) : config.glowStrength) : 0,
+    glowRadius: view.reducedMotion ? Math.min(view.worldPixelPitch * config.glowRadius, density * 3) : view.worldPixelPitch * config.glowRadius,
     threshold: config.glowThreshold, curvature: config.curvatureEnabled && !view.reducedMotion ? config.curvature : 0,
     hud: config.hudStrength, splash: view.started ? 0 : 1,
   };
+  return { ...uniforms, active: !!config.enabled && !!(uniforms.optical || uniforms.scanline || uniforms.glow || uniforms.curvature) };
 }
 
 type Pose = { x: number; y: number; frame: number; time: number | undefined; fringe: Fringe };

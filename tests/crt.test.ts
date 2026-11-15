@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { monitorUniforms, MotionTracker, MAX_MOTION_OBJECTS } from '../src/crt-math';
 import { platformFringe, connectorFringe } from '../src/motion-geometry';
-import { DEFAULTS } from '../src/tuning';
+import { DEFAULTS, parseTuning, tuningDocument } from '../src/tuning';
 import type { MotionFrame, Fringe } from '../src/crt-math';
 import type { MotionFringes } from '../src/motion-fringes';
 
@@ -70,5 +70,22 @@ describe('static monitor treatment', () => {
     expect(reduced.scanline).toBe(DEFAULTS.crt.scanlineStrength / 2);
     expect(monitorUniforms({ ...DEFAULTS.crt, enabled: 0 }, view).active).toBe(false);
     expect(monitorUniforms({ ...DEFAULTS.crt, opticalEnabled: 0 }, view).optical).toBe(0);
+  });
+  it('passes strong normal settings through unchanged, including beyond the former hidden glow caps', () => {
+    const crt = {
+      ...DEFAULTS.crt, opticalDesktop: 18, opticalMobile: 12, scanlineStrength: .85, scanlinePeriod: 24,
+      glowStrength: 2, glowRadius: 16, glowThreshold: 0, curvature: .25, hudStrength: 1,
+    };
+    expect(parseTuning(tuningDocument({ ...DEFAULTS, crt })).crt).toEqual(crt);
+    for (const mobile of [false, true]) {
+      const u = monitorUniforms(crt, { ...view, mobile });
+      expect(u.optical).toBe(mobile ? 12 : 18); expect(u.scanline).toBe(.85);
+      expect(u.scanPeriod).toBe(48); expect(u.glow).toBe(2); expect(u.glowRadius).toBe(16 * view.worldPixelPitch);
+      expect(u.curvature).toBe(.25); expect(u.hud).toBe(1);
+    }
+    const reduced = monitorUniforms(crt, { ...view, reducedMotion: true });
+    expect(reduced.optical).toBe(.25); expect(reduced.scanline).toBe(.125);
+    expect(reduced.glow).toBe(.08); expect(reduced.glowRadius).toBe(6); expect(reduced.curvature).toBe(0);
+    expect(monitorUniforms({ ...crt, glowThreshold: 1 }, view).glow).toBe(0);
   });
 });

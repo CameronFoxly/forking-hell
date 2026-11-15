@@ -1,6 +1,37 @@
-# Integrated refinement validation
+# Validation
 
-## Executed checks
+## Projectile and CRT follow-up: current local source
+
+The current source and production build include the projectile/CRT fixes below. **They are not a new ZIP or public deployment.** The previous published release and package evidence are retained separately below.
+
+- **77 unit tests, strict TypeScript and the production build passed.**
+- **100 browser checks passed, 12 intentionally skipped**, in the final complete 112-case run after shader optimization: Chromium, Firefox, WebKit and DPR3 Chromium touch. The skips are CDP-only touch/GPU-budget cases outside their supported projects. Exact native-grid, palette and final-sample checks retain their integrity thresholds.
+- Nine projectile regressions cover fractional eased muzzle origins, frozen/reverse traversal, live re-emission, permanent conversion, source/branch ownership, cleanup and collision suppression. Unknown historical firing events are no longer synthesized from current geometry.
+- At conversion, inactive shots retire immediately. **Already-airborne shots may finish only their existing flight, retiring permanently at the next birth or expiry boundary.** They cannot replay afterward; live copies on other branches remain independent. Rendering and swept collisions both honor retirement.
+- A real keyboard-controlled nested-fork/reversal/conversion capture observed ten births: maximum first-observation muzzle discrepancy was 0.263 world pixels, with zero airborne-origin changes. The silent H.264 recording is 15.47 seconds at 1280x800 and 30 fps.
+- Every CRT amount produces distinct low/default/high shader output in gameplay and intro. Checks cover disabled-parent value retention, reduced/mobile/HUD overrides, exact disabled restoration, default luminance and scoped GPU-warning recovery. Defaults and complete v2 compatibility are unchanged.
+- A timing-sensitive native cancellation test was corrected to inspect the accepted collapse at the actual pointer-cancel event, rather than an earlier remote snapshot. No production input behavior was changed for that correction.
+
+### Matched default CRT performance
+
+The isolated harness used the same headless Chromium, macOS hardware, 1440x810 output, fixed three-lane scene and 0.65 zoom. Each sample measured 240 frame intervals after 60 warm-up frames; both final runs completed 300 actual renders with no browser runtime errors. User tabs were not changed.
+
+| Shader | Mean interval | 95th percentile | Approximate rate |
+| --- | --- | --- | --- |
+| Prior release `1a5321a` | 24.443 ms | 33.4 ms | 40.9 fps |
+| Final optimized source | 24.652 ms | 33.4 ms | 40.6 fps |
+
+The 0.85% mean difference does not show a material default-path regression in this bounded comparison. It also does **not** establish universal 60-fps performance. Higher-cost extremes and real phone hardware remain limitations.
+
+The initial manual bilinear implementation did regress the matched default path: prior-release means were 24.24/24.86 ms versus 29.65/29.30 ms. It was replaced by ray interpolation and four cached narrow/wide shader variants, preserving fractional optical control without resampling world pixels. An intermediate 16.666-ms result was rejected because a missing shader-template marker prevented completed rendering; the corrected harness checks render counts and runtime errors. Only `crt-matched-verified.json` represents the selected shader's final comparison.
+
+Session evidence includes `crt-final-comparison.png` (final off/shipped/strong desktop/touch gameplay and intro), `crt-strong-v2.json`, `projectile-replay.mp4`, the matched result and its isolated harness. The earlier 96 per-control captures and their performance values predate the final sampling optimization; they are not final-shader performance evidence.
+
+The updated simulation benchmark records mean/p95 step times of 0.00544/0.01417 ms at depth 8, 0.01124/0.02300 ms at depth 64 and 0.02621/0.03883 ms at depth 256. Actual forward traversal across 200 chunks retains 2,071 shot-history records while the chunk cache remains 24. Nearby queries and coin integration stay bounded, but retained history is intentionally not constant-memory.
+
+## Previous published release: `1a5321a`
+
+### Executed checks
 
 - Strict TypeScript and Vite production build passed.
 - **67 unit tests passed**: signed time, gates/transition contacts, reversible projectiles, character/camera behavior, strict v2 and historical v1 migration, independent 0.8-second lift/0.2-second collapse, recursive permanent rewards and depth 8/64/256. Coin checks cover no reward before impact, exactly-once conversion, pause/reversal, ramp-to-parent ownership, collision separation and a bounded solver conserving rewards through 256 merges.
@@ -21,7 +52,7 @@ The reviewed ZIP is **430,099 bytes**, SHA-256:
 
 Desktop, landscape/portrait touch, activated lineage, Tune, pause/results and coin-spread screenshots were captured from the live game. A 15.83-second, 1280x800, 30-fps H.264 MP4 shows four controlled lifts, eight conversions on successive landings, separated coin piles and returning to collect. It uses an imported 0.8/0.2 timing preset; shipped defaults remain 0.34/0.34. Capture is silent and uses real game controls, not a renderer fixture. A longer control-driven run reached X=1373.5 before normal game over, with captures across the varied playfield.
 
-## Measurements, not device guarantees
+### Measurements, not device guarantees
 
 On the macOS arm64 development host with Node 24.3.0, `node scripts/benchmark.mjs` recorded:
 
@@ -44,7 +75,7 @@ Sequential Chromium samples of a three-lane scene measured 120 requestAnimationF
 
 **The high-DPR landscape CRT case was about 40 fps, not 60.** Disabling CRT restored approximately 60 fps in that capture. These are host/browser observations, not isolated GPU timings, a worst-case firefight benchmark or phone performance guarantees. No output downsampling was introduced to disguise the cost.
 
-## Remaining external evidence
+### Remaining external evidence
 
 Actual iOS/Android hardware testing is not available from this environment. Emulation and desktop WebKit are not substitutes for real mobile Safari, thermal, battery, touch-latency or GPU evidence.
 

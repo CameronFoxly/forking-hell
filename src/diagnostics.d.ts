@@ -16,9 +16,15 @@ declare global {
         worldPixelScales: number[];
         highlightedCopies: number; tuning: ReturnType<typeof import('./tuning').tuningDocument>;
         worldTarget: number[]; filterResolution: number[]; outputResolution: number[]; worldPixelPitch: number;
-        crtActive: boolean;
+        crtActive: boolean; crtBudgetBlocked: boolean; reducedMotion: boolean;
+        crtUniforms: ReturnType<typeof import('./crt-math').monitorUniforms> | null;
         motionDraws: number;
         retainedCoins: number; activeBranches: number; averageFrameMs: number;
+      };
+      projectiles(): {
+        time: number;
+        sources: { id: string; branchId: number; sourceId: string; muzzle: { x: number; y: number }; converted: boolean }[];
+        shots: (import('./simulation').Shot & { pose: { x: number; y: number } })[];
       };
     };
   }

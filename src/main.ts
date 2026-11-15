@@ -51,6 +51,9 @@ function notify(message: string): void {
   element('notice-message').textContent = message;
   console.warn(message);
 }
+function clearNotice(message: string): void {
+  if (element('notice-message').textContent === message) element('notice').hidden = true;
+}
 function persist(): void {
   if (!storageAvailable) return;
   const preferences: Preferences = { reducedMotion, best, sound: audio.sound, music: audio.music };
@@ -107,7 +110,7 @@ controls = new Controls(() => simulation.paused ? resume() : pause(), () => { vo
 startButton.addEventListener('click', () => restart());
 element('restart').addEventListener('click', () => restart());
 element('again').addEventListener('click', () => restart());
-mountTuningPanel(() => tuning, (next, newRun) => {
+const tuningPanel = mountTuningPanel(() => tuning, (next, newRun) => {
   if (newRun && !viewportFits) throw new Error('Enlarge the game viewport before applying a new run. Your pending values are unchanged.');
   tuning = next;
   simulation.config = next;
@@ -174,7 +177,7 @@ class GameScene extends Phaser.Scene {
     character = new CharacterAnimation(atlas, tuning.character);
     this.world = new WorldRenderer(this);
     this.palette = applyPixelComposition(this, this.world.composition);
-    this.crt = attachCrt(this, notify);
+    this.crt = attachCrt(this, notify, clearNotice);
     const canvas = this.game.canvas;
     canvas.setAttribute('aria-label', 'Forking Hell pixel game. Keyboard controls are described below.');
     const resize = (): void => {
@@ -215,10 +218,21 @@ class GameScene extends Phaser.Scene {
         highlightedCopies: this.world.highlightedCopies, tuning: tuningDocument(tuning),
         worldTarget: [this.world.composition.width, this.world.composition.height], filterResolution: this.palette.resolution,
         outputResolution: [canvas.width, canvas.height], worldPixelPitch: this.world.camera.zoom * this.presentation.scale,
-        crtActive: this.crt.active, motionDraws: this.world.motion.draws,
+        crtActive: this.crt.active, crtUniforms: this.crt.uniforms, crtBudgetBlocked: this.crt.budgetBlocked, reducedMotion,
+        motionDraws: this.world.motion.draws,
         visibleShots: this.world.renderedShots, retainedShots: simulation.shots.size,
         retainedCoins: simulation.coins.size, activeBranches: simulation.branches.length,
         averageFrameMs: this.frameTimes.reduce((sum, n) => sum + n, 0) / Math.max(1, this.frameTimes.length),
+      }),
+      projectiles: () => ({
+        time: simulation.time,
+        sources: simulation.nearby(simulation.player.x - 350, simulation.player.x + 350)
+          .filter(hazard => hazard.kind === 'shooter').flatMap(hazard => simulation.branches.map((branch, depth) => ({
+            id: `${branch.id}/${hazard.id}`, branchId: branch.id, sourceId: hazard.id,
+            muzzle: simulation.shooterMuzzle(depth, hazard), converted: simulation.isConverted(depth, hazard.id),
+          }))),
+        shots: [...simulation.shotsNear(simulation.player.x - 350, simulation.player.x + 350, simulation.playerWorldY - 300, simulation.playerWorldY + 300)]
+          .flatMap(shot => { const pose = simulation.shotPose(shot); return pose ? [{ ...shot, pose }] : []; }),
       }),
     } });
   }
@@ -250,6 +264,10 @@ class GameScene extends Phaser.Scene {
       cssWidth: canvas.width / this.presentation.dpr, cssHeight: canvas.height / this.presentation.dpr,
       worldPixelPitch: this.world.camera.zoom * this.presentation.scale,
       mobile: touch || canvas.width / this.presentation.dpr < 700, reducedMotion, started,
+    });
+    tuningPanel.updateCrtStatus({
+      active: this.crt.active, budgetBlocked: this.crt.budgetBlocked, reduced: reducedMotion,
+      mobile: touch || canvas.width / this.presentation.dpr < 700, started,
     });
     if (!simulation.paused && !simulation.gameOver) character.afterDraw();
     const nextHint = hint(simulation, touch).join('. ');

@@ -24,7 +24,7 @@ export type Branch = {
   staged: Set<string>;
   converted: Set<string>;
 };
-export type Shot = { id: string; branchId: number; sourceId: string; birth: number; x: number; y: number; vx: number; vy: number };
+export type Shot = { id: string; branchId: number; sourceId: string; birth: number; x: number; y: number; vx: number; vy: number; retired?: boolean };
 export type Coin = { id: string; branchId: number; x: number; y: number; vx: number; vy: number; bornAt: number; collected: boolean };
 export type Burst = { x: number; branchId: number; age: number; kind: 'stage' | 'merge' | 'coin' | 'hit' | 'fork' };
 export type Transition = { kind: 'branch' | 'merge'; age: number; from: number };
@@ -140,6 +140,8 @@ export class Simulation {
   private readonly firstConvertedDepth = new Map<string, number>();
   private readonly shotBuckets = new Map<string, Set<Shot>>();
   private readonly branchShots = new Map<number, Set<Shot>>();
+  private readonly sourceShots = new Map<string, Set<Shot>>();
+  private readonly orphanedShots = new Set<Shot>();
   private readonly coinBuckets = new Map<number, Set<Coin>>();
   private readonly coinCells = new Map<string, Set<Coin>>();
   coinPhysicsCount = 0;
@@ -163,7 +165,11 @@ export class Simulation {
   get unit(): number { return this.config.branches.length; }
   get transitionDuration(): number { return this.transition?.kind === 'merge' ? this.config.branches.collapseDuration : this.config.branches.liftDuration; }
   pose(hazard: Encounter, time = this.time): ReturnType<typeof hazardPose> { return hazardPose(hazard, time, this.config.enemies); }
-  shotPose(shot: Shot): ReturnType<typeof shotPosition> { return shotPosition(shot, this.time, this.config.enemies.shotLife); }
+  shotPose(shot: Shot): ReturnType<typeof shotPosition> { return shot.retired ? null : shotPosition(shot, this.time, this.config.enemies.shotLife); }
+  shooterMuzzle(depth: number, hazard: Encounter, time = this.time, age = this.transition?.age ?? 0): { x: number; y: number } {
+    const pose = this.pose(hazard, time);
+    return { x: pose.x, y: this.surfaceAt(depth, pose.x, age).height + pose.y + 12 };
+  }
   get score(): number { return this.coinScore + this.destructionScore + this.distanceScore; }
   get currentDepth(): number { return this.surfaceAt(this.depth, this.player.x).depth; }
   get playerWorldY(): number {
@@ -274,6 +280,13 @@ export class Simulation {
       if (!this.isConverted(this.depth - 1, id)) {
         parent.converted.add(id);
         this.firstConvertedDepth.set(id, Math.min(this.firstConvertedDepth.get(id) ?? Infinity, this.depth - 1));
+        if (target.kind === 'shooter') for (const branch of [parent, child]) {
+          for (const shot of this.sourceShots.get(`${branch.id}/${id}`) ?? []) {
+            if (shot.retired) continue;
+            if (this.time > shot.birth && this.shotPose(shot)) this.orphanedShots.add(shot);
+            else this.retireShot(shot);
+          }
+        }
         const rewardId = `${parent.id}/${id}`;
         if (!this.awarded.has(rewardId)) {
           this.awarded.add(rewardId);
@@ -310,12 +323,9 @@ export class Simulation {
     if (parentCoins.size) this.branchCoins.set(parent.id, parentCoins);
     this.branchCoins.delete(child.id);
     for (const shot of this.branchShots.get(child.id) ?? []) {
+      this.retireShot(shot);
       this.shots.delete(shot.id);
-      for (const key of this.shotBucketKeys(shot)) {
-        const bucket = this.shotBuckets.get(key);
-        bucket?.delete(shot);
-        if (bucket?.size === 0) this.shotBuckets.delete(key);
-      }
+      this.sourceShots.delete(`${child.id}/${shot.sourceId}`);
     }
     this.branchShots.delete(child.id);
     this.branches.pop();
@@ -454,6 +464,20 @@ export class Simulation {
     return keys;
   }
 
+  private unindexShot(shot: Shot): void {
+    for (const key of this.shotBucketKeys(shot)) {
+      const bucket = this.shotBuckets.get(key);
+      bucket?.delete(shot);
+      if (!bucket?.size) this.shotBuckets.delete(key);
+    }
+  }
+
+  private retireShot(shot: Shot): void {
+    if (!shot.retired) this.unindexShot(shot);
+    shot.retired = true;
+    this.orphanedShots.delete(shot);
+  }
+
   shotsNear(minX: number, maxX: number, minY: number, maxY: number): Set<Shot> {
     const shots = new Set<Shot>();
     for (let x = Math.floor(minX / 128); x <= Math.floor(maxX / 128); x++) {
@@ -464,28 +488,35 @@ export class Simulation {
     return shots;
   }
 
-  private ensureShots(hazard: Encounter, branch: Branch, ground: number, start: number, end: number): void {
+  private emitShots(hazard: Encounter, depth: number, start: number, end: number, oldAge: number, dt: number, oldX: number, oldY: number): void {
+    if (end <= start) return;
+    const branch = this.branches[depth]!;
     const phase = hazard.phase;
-    const first = Math.ceil((Math.min(start, end) - this.config.enemies.shotLife - phase) / hazard.period);
-    const last = Math.floor((Math.max(start, end) - phase) / hazard.period);
+    const first = Math.ceil((start - phase) / hazard.period);
+    const last = Math.floor((end - phase) / hazard.period);
     for (let n = first; n <= last; n++) {
       const id = `${branch.id}/${hazard.id}/${n}`;
-      if (this.shots.has(id)) continue;
-      const x = hazard.x;
-      const y = ground + 12;
-      const dx = this.player.x - x;
-      const dy = this.playerWorldY + PLAYER_HEIGHT / 2 - y;
+      const previous = this.shots.get(id), birth = n * hazard.period + phase;
+      if (previous?.retired || previous && birth < start) continue;
+      const ratio = (birth - start) / (end - start);
+      const { x, y } = this.shooterMuzzle(depth, hazard, birth, Math.min(this.transitionDuration, oldAge + dt * ratio));
+      const dx = oldX + (this.player.x - oldX) * ratio - x;
+      const dy = oldY + (this.playerWorldY - oldY) * ratio + PLAYER_HEIGHT / 2 - y;
       const distance = Math.hypot(dx, dy);
       if (distance > this.attackRange) continue;
-      const shot: Shot = {
-        id, branchId: branch.id, sourceId: hazard.id, birth: n * hazard.period + phase, x, y,
+      const shot: Shot = previous ?? {
+        id, branchId: branch.id, sourceId: hazard.id, birth, x, y,
         vx: distance > 0 ? dx / distance * this.config.enemies.shotSpeed : -this.config.enemies.shotSpeed,
         vy: distance > 0 ? dy / distance * this.config.enemies.shotSpeed : 0,
       };
+      // A living re-emission may have a new action-clock support, but an airborne shot never follows it.
+      if (previous) { this.unindexShot(shot); shot.x = x; shot.y = y; }
       this.shots.set(id, shot);
       const owned = this.branchShots.get(branch.id) ?? new Set<Shot>();
       owned.add(shot);
       this.branchShots.set(branch.id, owned);
+      const source = `${branch.id}/${hazard.id}`, emitted = this.sourceShots.get(source) ?? new Set<Shot>();
+      emitted.add(shot); this.sourceShots.set(source, emitted);
       for (const key of this.shotBucketKeys(shot)) {
         const bucket = this.shotBuckets.get(key) ?? new Set<Shot>();
         bucket.add(shot);
@@ -636,12 +667,13 @@ export class Simulation {
       for (const hazard of hazards) {
         if (hazard.kind === 'shooter' && hazard.x >= branch.forkX && !this.isConverted(depth, hazard.id) &&
           Math.abs(heightAt(depth, hazard.x) - this.playerWorldY) <= this.attackRange) {
-          this.ensureShots(hazard, branch, heightAt(depth, hazard.x), oldTime, this.time);
+          this.emitShots(hazard, depth, oldTime, this.time, oldTransitionAge, dt, oldX, oldWorldY);
         }
       }
     }
     const worldY = this.playerWorldY;
     for (const shot of this.shotsNear(Math.min(oldX, this.player.x) - PLAYER_WIDTH, Math.max(oldX, this.player.x) + PLAYER_WIDTH, Math.min(oldWorldY, worldY) - 12, Math.max(oldWorldY, worldY) + 30)) {
+      if (shot.retired) continue;
       const lo = Math.max(Math.min(oldTime, this.time), shot.birth);
       const hi = Math.min(Math.max(oldTime, this.time), shot.birth + this.config.enemies.shotLife);
       if (lo > hi || (oldTime === this.time && !this.shotPose(shot))) continue;
@@ -661,6 +693,7 @@ export class Simulation {
         oldWorldY + (worldY - oldWorldY) * endRatio + PLAYER_HEIGHT / 2 - endY, PLAYER_WIDTH / 2 + 2, PLAYER_HEIGHT / 2 + 2,
       )) this.hurt();
     }
+    for (const shot of this.orphanedShots) if (this.time <= shot.birth || !shotPosition(shot, this.time, this.config.enemies.shotLife)) this.retireShot(shot);
     for (const coin of this.coinsNear(this.player.x - 14, this.player.x + 14)) {
       if (coin.branchId === this.branches[physicalDepth]!.id && Math.abs(this.player.x - coin.x) < 13 &&
         Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - this.surfaceAt(physicalDepth, coin.x).height - this.coinY(coin)) < 18 && this.realTime - coin.bornAt > 0.12 && !this.transition) {

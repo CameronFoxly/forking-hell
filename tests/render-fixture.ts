@@ -2,8 +2,9 @@ import Phaser from 'phaser';
 import { parseCharacterAtlas } from '../src/character';
 import { applyPixelComposition } from '../src/pixel';
 import { WorldRenderer } from '../src/renderer';
-import { Simulation } from '../src/simulation';
+import { encounters, Simulation, STEP } from '../src/simulation';
 import { attachCrt } from '../src/crt';
+import type { Tuning } from '../src/tuning';
 
 type ProbeResult = { native: string; filtered: string; screen: string; left: number; top: number; x: number; y: number; pitch: number; filter: number[] };
 type JunctionResult = { image: string; left: number; top: number; forks: { x: number; y: number; end: number }[]; supports: number[]; depth: number; danger: boolean; converted: boolean };
@@ -11,7 +12,8 @@ declare global { interface Window {
   renderProbe: (zoom: number, pan: number, scale: number) => Promise<ProbeResult>;
   junctionProbe: (staged: boolean, merges: number, pan: number) => Promise<JunctionResult>;
   tweenProbe: (kind: 'branch' | 'merge', steps: number, nested: boolean | 'backtracked', zoom: number) => Promise<{ image: string; left: number; top: number; points: number[][]; end: number[]; foot: number[]; worldY: number }>;
-  effectProbe: (enabled: boolean) => Promise<string>;
+  effectProbe: (enabled: boolean, config?: Partial<Tuning['crt']>, started?: boolean, mobile?: boolean) => Promise<string>;
+  muzzleProbe: (kind: 'branch' | 'merge') => Promise<{ image: string; left: number; top: number; points: { x: number; y: number }[] }>;
 } }
 class Probe extends Phaser.Scene {
   preload(): void {
@@ -31,11 +33,42 @@ class Probe extends Phaser.Scene {
     const frame = atlas.Idle[0]!;
     const draw = (): void => world.draw(simulation, { started: true, reducedMotion: true, best: 0, touch: false, delta: 0 }, frame, 'Idle', 0);
     draw();
-    window.effectProbe = async enabled => {
+    window.muzzleProbe = async kind => {
+      simulation = new Simulation(123);
+      simulation.config.branches.liftDuration = .8; simulation.config.branches.collapseDuration = .2;
+      const shooter = encounters(123, 1)[0]!;
+      simulation.player.x = shooter.x - 100;
+      for (let n = 0; n < 2; n++) { simulation.branch(); while (simulation.transition) simulation.step(); }
+      if (kind === 'branch') simulation.branch(); else simulation.merge();
+      for (let n = 0; n < 5; n++) simulation.step();
+      const birthAge = simulation.transition!.age + STEP / 2;
+      simulation.time = shooter.phase - STEP / 2;
+      simulation.step({ move: 1, jump: false, branch: false, merge: false });
+      simulation.time += .25;
+      simulation.paused = true;
+      draw();
+      world.resize(3); world.camera.zoom = .65; world.camera.centerX = shooter.x - 60; world.camera.centerY = 58;
+      draw();
+      await new Promise<void>(resolve => this.game.events.once('postrender', resolve));
+      const image = await new Promise<string>((resolve, reject) => {
+        world.composition.snapshot(value => value instanceof HTMLImageElement ? resolve(value.src) : reject(new Error('Muzzle snapshot failed')));
+      });
+      return {
+        image, left: world.sourceLeft, top: world.sourceTop,
+        points: simulation.branches.map((branch, depth) => {
+          const muzzle = simulation.shooterMuzzle(depth, shooter, shooter.phase, birthAge);
+          const shot = [...simulation.shots.values()].find(shot => shot.branchId === branch.id && shot.birth === shooter.phase)!;
+          return { x: muzzle.x + shot.vx * (simulation.time - shot.birth), y: muzzle.y + shot.vy * (simulation.time - shot.birth) };
+        }),
+      };
+    };
+    window.effectProbe = async (enabled, config = {}, started = true, mobile = false) => {
+      world.resize(this.game.canvas.width / 480);
+      world.draw(simulation, { started, reducedMotion: true, best: 0, touch: mobile, delta: 0 }, frame, 'Idle', 0);
       const canvas = this.game.canvas, box = canvas.getBoundingClientRect();
-      crt.update({ ...simulation.config.crt, enabled: Number(enabled) }, {
+      crt.update({ ...simulation.config.crt, ...config, enabled: Number(enabled) }, {
         width: canvas.width, height: canvas.height, cssWidth: box.width, cssHeight: box.height,
-        worldPixelPitch: world.presentation.scaleX, mobile: false, reducedMotion: false, started: true,
+        worldPixelPitch: world.presentation.scaleX, mobile, reducedMotion: false, started,
       });
       await new Promise<void>(resolve => this.game.events.once('postrender', resolve));
       return canvas.toDataURL();

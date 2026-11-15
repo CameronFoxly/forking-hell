@@ -186,15 +186,15 @@ describe('reversible hazards and stable projectile identities', () => {
     expect(sweptHit(-30, 30, 30, 30, 9, 11)).toBe(false);
   });
 
-  it('retains active shooters on all layers and stable history after conversion', () => {
+  it('retains airborne history after conversion, separately from permission to replay it', () => {
     const game = new Simulation();
     const shooter = encounters(game.seed, 1)[0]!;
     game.player.x = shooter.x - ATTACK_RANGE + 60;
     game.branch(); settle(game);
     expect(game.isOrdinaryActive(1, shooter)).toBe(true);
     expect(game.isOrdinaryActive(0, shooter)).toBe(true);
-    game.time = shooter.phase + 0.2;
-    game.step();
+    game.time = shooter.phase - STEP / 2;
+    game.step({ ...idle, move: 1 });
     const ids = [...game.shots.keys()];
     expect(ids.length).toBeGreaterThan(0);
     run(game, 0.1, { move: -1 }); run(game, 0.1, { move: 1 });
@@ -208,8 +208,8 @@ describe('reversible hazards and stable projectile identities', () => {
     const shooter = encounters(game.seed, 1)[0]!;
     game.player.x = shooter.x - 90;
     game.branch(); settle(game);
-    game.time = shooter.phase;
-    game.step();
+    game.time = shooter.phase - STEP / 2;
+    game.step({ ...idle, move: 1 });
     const shot = [...game.shots.values()].find(s => s.branchId === 0 && s.birth === shooter.phase)!;
     expect(shot.vy).toBeGreaterThan(0);
     const launch = { ...shot };
@@ -304,8 +304,8 @@ describe('reversible hazards and stable projectile identities', () => {
     const game = new Simulation();
     const shooter = encounters(game.seed, 1)[0]!;
     game.player.x = shooter.x - 80;
-    game.time = shooter.phase;
-    game.step();
+    game.time = shooter.phase - STEP / 2;
+    game.step({ ...idle, move: 1 });
     const shot = [...game.shots.values()].find(s => s.birth === shooter.phase)!;
     const travel = 80 / 86;
     game.time = shot.birth + travel + STEP;
@@ -322,8 +322,9 @@ describe('reversible hazards and stable projectile identities', () => {
       const shooter = encounters(game.seed, c).find(h => h.kind === 'shooter');
       if (!shooter) continue;
       game.player.x = shooter.x - 100;
-      game.time = (game.player.x - 64) / SPEED;
-      game.step();
+      const event = Math.ceil(((game.player.x - 64) / SPEED - shooter.phase) / shooter.period);
+      game.time = event * shooter.period + shooter.phase - STEP / 2;
+      game.step({ ...idle, move: 1 });
     }
     const retained = game.shots.size;
     expect(retained).toBeGreaterThan(15);

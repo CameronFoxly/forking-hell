@@ -30,7 +30,9 @@ for (const depth of [8, 64, 256]) {
   for (let chunk = 1; chunk <= 200; chunk++) {
     game.player.x = chunk * CHUNK + 200;
     game.time = (game.player.x - 64) / SPEED;
-    game.step(); game.events.length = 0;
+    for (let n = 0; n < 240; n++) {
+      game.step({ ...input, move: 1 }); game.events.length = 0;
+    }
   }
   console.log(JSON.stringify({
     depth, meanStepMs: durations.reduce((sum, value) => sum + value, 0) / durations.length,

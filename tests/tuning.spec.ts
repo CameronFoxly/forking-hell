@@ -151,14 +151,23 @@ test('mobile repeated taps and holds avoid selection while tuning numbers remain
   });
   for (let i = 0; i < 5; i++) await page.locator('[data-control="jump"]').tap();
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
-  for (let d = 1; d <= 3; d++) await fork(page, d);
+  for (let d = 1; d <= 6; d++) await fork(page, d);
+  await page.evaluate(() => {
+    window.addEventListener('pointercancel', () => {
+      const state = window.forkingHell.snapshot();
+      document.body.dataset.cancelDepth = String(state.depth - Number(state.transition === 'merge'));
+    }, { once: true, capture: true });
+  });
   const rect = await page.locator('[data-control="merge"]').boundingBox();
   const client = await context.newCDPSession(page);
   await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: rect!.x + rect!.width / 2, y: rect!.y + rect!.height / 2, id: 1 }] });
-  await page.waitForFunction(() => window.forkingHell.snapshot().depth === 2 && window.forkingHell.snapshot().transition === 'merge');
+  await page.waitForFunction(() => window.forkingHell.snapshot().depth === 5 && window.forkingHell.snapshot().transition === 'merge');
   await client.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] });
+  const acceptedDepth = await page.evaluate(() => Number(document.body.dataset.cancelDepth));
+  expect(acceptedDepth).toBeGreaterThan(0);
   await page.waitForTimeout(550);
-  expect(await page.evaluate(() => window.forkingHell.snapshot().depth)).toBe(1);
+  expect(await page.evaluate(() => window.forkingHell.snapshot().depth)).toBe(acceptedDepth);
+  expect(await page.evaluate(() => window.forkingHell.snapshot().transition)).toBeNull();
   await page.locator('#tuning-toggle').tap(); await page.locator('#tuning-sections summary').first().tap();
   const number = page.locator('#tune-character-speed'); await number.fill('135'); await number.press('Tab');
   expect((await current(page)).character.speed).toBe(135);

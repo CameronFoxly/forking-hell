@@ -1,13 +1,21 @@
 import { DEFAULTS, entries, FIELDS, needsRestart, parseTuning, RESTART_SECTIONS, SECTIONS, tuningDocument } from './tuning';
 import type { Tuning } from './tuning';
 
-export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, restart: boolean) => void, clearInput: () => void): void {
+export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, restart: boolean) => void, clearInput: () => void) {
   const panel = document.getElementById('tuning-panel')!;
   const toggle = document.getElementById('tuning-toggle')!;
   const status = document.getElementById('tuning-status')!;
   const controls = document.getElementById('tuning-sections')!;
   const commit = document.getElementById('tuning-apply') as HTMLButtonElement;
   const inputs = new Map<string, HTMLInputElement[]>();
+  const crtStatus = document.createElement('p');
+  crtStatus.id = 'crt-status'; crtStatus.className = 'tuning-note'; crtStatus.setAttribute('role', 'status');
+  const parents: Partial<Record<keyof Tuning['crt'], keyof Tuning['crt']>> = {
+    opticalDesktop: 'opticalEnabled', opticalMobile: 'opticalEnabled',
+    scanlineStrength: 'scanlinesEnabled', scanlinePeriod: 'scanlinesEnabled',
+    glowStrength: 'glowEnabled', glowRadius: 'glowEnabled', glowThreshold: 'glowEnabled',
+    curvature: 'curvatureEnabled',
+  };
   let draft = structuredClone(read());
   let fileRequest = 0;
   const report = (message: string, error = false): void => {
@@ -19,6 +27,11 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
         if (input.type === 'checkbox') input.checked = Boolean(value);
         else input.value = String(value);
       }
+    }
+    for (const [key] of entries(draft.crt)) for (const input of inputs.get(`crt.${key}`) ?? []) {
+      const parent = parents[key];
+      input.disabled = key !== 'enabled' && (!draft.crt.enabled || !!parent && !draft.crt[parent]);
+      input.closest('.tuning-field')?.toggleAttribute('data-inactive', input.disabled);
     }
   }
   function accept(next: Tuning): void {
@@ -38,6 +51,12 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
     const summary = document.createElement('summary'); summary.textContent = SECTIONS[section];
     summary.tabIndex = 0;
     details.append(summary);
+    if (section === 'crt') {
+      details.append(crtStatus);
+      const note = document.createElement('p'); note.className = 'tuning-note';
+      note.textContent = 'Enable each effect before adjusting its amounts. Disabled values are kept. Threshold 1 removes glow. DOM menus and controls stay unfiltered for readability.';
+      details.append(note);
+    }
     if (RESTART_SECTIONS.includes(section)) {
       const note = document.createElement('p'); note.className = 'tuning-note';
       note.textContent = 'Changes apply together with a new run to preserve terrain and shot history.';
@@ -127,4 +146,14 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
     }
   });
   refresh();
+  return {
+    updateCrtStatus(view: { active: boolean; budgetBlocked: boolean; reduced: boolean; mobile: boolean; started: boolean }): void {
+      const config = read().crt;
+      const state = !config.enabled ? 'CRT is off.' : view.budgetBlocked ? 'CRT is bypassed: this canvas exceeds the GPU budget.' :
+        view.active ? 'CRT is active.' : 'CRT has no active effect at these settings.';
+      const reduced = view.reduced ? ' Reduced effects caps optical split at 0.25 CSS px, glow at 0.08 / 3 CSS px, scanline depth at 0.125, and disables curvature.' : '';
+      const message = `${state} This viewport uses the ${view.mobile ? 'mobile' : 'desktop'} optical amount.${reduced}${view.started ? '' : ` Intro treatment uses the HUD / splash amount (${Math.round(config.hudStrength * 100)}%).`}`;
+      if (crtStatus.textContent !== message) crtStatus.textContent = message;
+    },
+  };
 }

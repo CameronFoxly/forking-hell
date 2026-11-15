@@ -22,6 +22,23 @@ Complete historical v1 documents are migrated explicitly: the old branch shape h
 
 `audio.mergePitchStep` controls semitones per completed layer, capped at two octaves. `audio.successThreshold` defaults to four completed held merges, producing one success flourish per uninterrupted hold. Sound mute remains authoritative. `effects.highlightStrength` tunes ancestry links/brackets; activated sprite colors remain as a separate state cue. Reduced shake/flashes suppresses shaking and glow pulsing and reduces particle travel.
 
+## CRT ranges and effective state
+
+Defaults and the complete v2 document shape are unchanged; existing v2 presets still import. Normal-mode monitor controls now span deliberately strong settings:
+
+| Control | Range |
+| --- | --- |
+| Desktop / mobile optical split | 0-18 / 0-12 CSS pixels at the edge |
+| Scanline depth / spacing | 0-0.85 / 2-24 CSS pixels |
+| Glow strength / radius | 0-2 / 0.5-16 world pixels projected into monitor space |
+| Emissive threshold | 0-1; 1 removes glow |
+| Curvature | 0-0.25 |
+| Canvas HUD / splash treatment | 0-1 |
+
+Enable the master CRT switch and each desired effect. Disabled subordinate controls retain their values and show `[off]`; amounts never enable their parent implicitly. The live status names the optical amount used by this viewport and explains why treatment is inactive. Intro treatment uses the HUD/splash amount (20% by default), not the full gameplay-world amount. DOM buttons, menus and Tune remain unfiltered for readability.
+
+Reduced effects cap optical split at 0.25 CSS pixels, glow strength at 0.08, glow radius at 3 CSS pixels, scanline depth at 0.125 (and half the selected depth), and disable curvature. Those overrides are shown in Tune. Normal mode has no former 0.25-strength / 3-CSS-pixel glow clamp. Buffers beyond the GPU dimension/area budget bypass CRT with an owned notice that clears on recovery; high settings still cost GPU time below that budget. No automatic resolution reduction hides that cost.
+
 ## Integration
 
 Add tunables to `FIELDS` and the full `src/defaults.json` together; `Tuning` derives its section/key shape from `FIELDS`. Preserve exact validation and update rejection/round-trip cases. The panel enumerates fields rather than maintaining an independent settings list. Safe application uses the complete validated `Tuning` object; restart-required application must reject before assigning state if a new run cannot start.
