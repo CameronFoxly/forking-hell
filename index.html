@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14102b">
+  <meta name="description" content="Fork the path. Stage your escape. Merge the chaos. A pixel platformer where your movement controls time.">
+  <title>Forking Hell — a reversible-time platformer</title>
+</head>
+<body>
+  <!-- THESIS: Play a git graph, not a dashboard. OWN-WORLD: ink-indigo void, violet forks,
+  cyan commit rings, hard-edged silhouettes on one pixel lattice. STORY: move to drive
+  time, fork to stage danger, merge to collect it. FIRST VIEWPORT: a wide playable graph,
+  the Octocat on its main line, nearby hazards, compact instructions and one start action.
+  FORM: brief-pinned pixel arcade cabinet, landscape-first; no unrelated visual-world roll. -->
+  <main>
+    <header class="topbar">
+      <div class="brand"><h1>Forking Hell</h1><p>A reversible-time platformer</p></div>
+      <nav aria-label="Game actions">
+        <button id="fullscreen" type="button">Fullscreen</button>
+        <button id="pause" type="button" disabled>Pause <kbd>Esc</kbd></button>
+      </nav>
+    </header>
+    <p class="rotate-note">Landscape gives the graph more room. You can play either way.</p>
+    <div id="game" tabindex="0" role="application" aria-label="Forking Hell game" aria-describedby="instructions">
+      <div id="canvas-ui">
+        <button id="start" class="primary" type="button" disabled>Enter the graph →</button>
+        <section id="pause-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Paused game and settings" hidden>
+          <h2>Take your time.</h2>
+          <p>Both clocks are paused. Your graph will be right here.</p>
+          <div class="settings">
+            <label><input id="reduced" type="checkbox"> Reduce shake &amp; flashes</label>
+            <label><input id="sound" type="checkbox" checked> Sound effects</label>
+            <label><input id="music" type="checkbox"> Ambient audio</label>
+          </div>
+          <div class="actions">
+            <button id="resume" class="primary" type="button">Resume</button>
+            <button id="restart" type="button">New run</button>
+          </div>
+        </section>
+        <section id="game-over" class="overlay" role="dialog" aria-modal="true" aria-label="Run results" hidden>
+          <h2>One hell of a run.</h2>
+          <strong id="score-total">0</strong>
+          <p id="score-breakdown"></p>
+          <div class="actions"><button id="again" class="primary" type="button">Run it back →</button></div>
+        </section>
+      </div>
+      <div id="touch-controls" aria-label="Touch game controls">
+        <div class="move-controls">
+          <button type="button" data-control="left" aria-label="Move left and reverse time">←</button>
+          <button type="button" data-control="right" aria-label="Move right and advance time">→</button>
+        </div>
+        <div class="action-controls">
+          <button type="button" data-control="merge" aria-label="Merge down one branch">Merge<br>↓</button>
+          <button type="button" data-control="branch" aria-label="Create a branch above">Fork<br>↑</button>
+          <button type="button" data-control="jump" aria-label="Jump">Jump</button>
+        </div>
+      </div>
+      <section id="size-warning" role="status" hidden>
+        <h2>The graph needs more room.</h2>
+        <p>Rotate your device or enlarge this window. Play is paused until the full pixel canvas fits.</p>
+      </section>
+    </div>
+    <footer class="bottom-bar">
+      <p id="instructions">A / D move · Space jump · W fork · S merge · Esc pause</p>
+      <a href="https://github.com/CameronFoxly/forking-hell" target="_blank" rel="noreferrer">About &amp; source ↗</a>
+    </footer>
+    <p id="status" class="sr-only" role="status" aria-live="polite">Loading the graph…</p>
+    <aside id="notice" role="status" hidden><p id="notice-message"></p><button id="dismiss-notice" type="button" aria-label="Dismiss notice">Dismiss</button></aside>
+    <section id="error" role="alert" hidden>
+      <h2>The graph couldn't start.</h2><p id="error-message"></p>
+      <button type="button" onclick="location.reload()">Reload</button>
+    </section>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
