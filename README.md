@@ -20,6 +20,8 @@ No install or account needed. Choose **Enter the graph** to start.
 
 Three hits end the run. Score comes from **5 points per new game unit of forward progress**, **100 per converted obstacle copy**, and **25 per coin**. Backtracking does not earn the same distance points again.
 
+The opening has wider gaps and few shooters. As you reach new ground, encounters become denser and shooters more common, with seeded clusters and breathing room throughout. Backtracking and forking never reroll the terrain; your movement, jump and projectile tuning values stay unchanged.
+
 ### Controls
 
 | Action | Keyboard | Touch |

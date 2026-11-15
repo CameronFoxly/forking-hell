@@ -46,13 +46,18 @@ export function encounters(seed: number, chunk: number, settings = DEFAULTS.enem
   if (chunk < 0) return [];
   if (chunk === 0) return [
     { id: '0:0', kind: 'patrol', x: 232, phase: 0, period: 3.6 },
-    { id: '0:1', kind: 'spinner', x: 384, phase: 1.2, period: 3.2 },
+    { id: '0:1', kind: 'spinner', x: 424, phase: 1.2, period: 3.2 },
   ];
-  const kinds: HazardKind[] = ['patrol', 'spinner', 'shooter', 'gate'];
-  const count = Math.min(4, 2 + Math.floor(chunk / 6));
+  const random = (offset: number): number => hash(seed, chunk * 101 + offset) / 0x100000000;
+  const progress = 1 - Math.exp(-chunk / 14);
+  const expectedCount = 1.1 + 2.5 * progress;
+  const count = Math.floor(expectedCount) + Number(random(70) < expectedCount % 1);
+  const shooterShare = .025 + .455 * progress ** 1.4;
+  const kinds: HazardKind[] = ['patrol', 'spinner', 'gate'];
   const result = Array.from({ length: count }, (_, i) => {
     const n = hash(seed, chunk * 11 + i);
-    const kind = chunk === 1 && i === 0 ? 'shooter' : kinds[n % kinds.length]!;
+    const roll = random(10 + i);
+    const kind = roll < shooterShare ? 'shooter' : kinds[Math.floor((roll - shooterShare) / (1 - shooterShare) * kinds.length)]!;
     return {
       id: `${chunk}:${i}`,
       kind,
@@ -62,22 +67,37 @@ export function encounters(seed: number, chunk: number, settings = DEFAULTS.enem
     };
   });
   const radius = (hazard: Encounter): number => 13 + (hazard.kind === 'patrol' ? settings.patrolRange : 0);
-  const gaps = (): number[] => result.slice(1).map((hazard, i) => radius(result[i]!) + radius(hazard) + 40);
-  const left = Math.max(64, radius(result[0]!) + 24);
-  while (result.length > 2 && left + Math.max(64, radius(result.at(-1)!) + 24) + gaps().reduce((a, b) => a + b, 0) > CHUNK) result.pop();
+  const margin = (hazard: Encounter): number => Math.ceil(radius(hazard) + 20);
+  const gaps = (): number[] => result.slice(1).map((hazard, i) => Math.ceil(radius(result[i]!) + radius(hazard) + 40));
+  const left = margin(result[0]!);
+  while (result.length > 1 && left + margin(result.at(-1)!) + gaps().reduce((a, b) => a + b, 0) > CHUNK) result.pop();
+  if (result.length === 1) {
+    result[0]!.x = chunk * CHUNK + 160 + Math.floor(random(71) * 161);
+    return result;
+  }
   const spacing = gaps();
-  let spare = CHUNK - left - Math.max(64, radius(result.at(-1)!) + 24) - spacing.reduce((a, b) => a + b, 0);
-  const random = (offset: number): number => hash(seed, chunk * 101 + offset) / 0xffffffff;
-  const lead = Math.floor(random(71) * Math.min(80, spare)); spare -= lead;
-  spare -= Math.floor(random(72) * Math.min(80, spare));
-  const weights = spacing.map((_, i) => 0.15 + random(80 + i) ** 2 * 2);
-  const totalWeight = weights.reduce((a, b) => a + b, 0);
-  result[0]!.x = chunk * CHUNK + left + lead;
-  let allocated = 0;
+  const right = margin(result.at(-1)!);
+  const spare = CHUNK - left - right - spacing.reduce((a, b) => a + b, 0);
+  // Distribute space to both chunk edges as well as internal gaps. Edge caps
+  // keep consecutive chunks within 640 pixels without consulting neighbors.
+  const weights = Array.from({ length: result.length + 1 }, (_, i) => .2 + random(80 + i) ** 2 * 3);
+  const caps = weights.map((_, i) => i === 0 ? 320 - left : i === weights.length - 1 ? 320 - right : Infinity);
+  const extras = weights.map(() => 0);
+  let active = weights.map((_, i) => i), remaining = spare;
+  while (active.length) {
+    const total = active.reduce((sum, i) => sum + weights[i]!, 0);
+    const capped = active.filter(i => remaining * weights[i]! / total > caps[i]!);
+    if (!capped.length) {
+      for (const i of active) extras[i] = Math.floor(remaining * weights[i]! / total);
+      break;
+    }
+    for (const i of capped) { extras[i] = caps[i]!; remaining -= caps[i]!; }
+    active = active.filter(i => !capped.includes(i));
+  }
+  extras[1]! += spare - extras.reduce((a, b) => a + b, 0);
+  result[0]!.x = chunk * CHUNK + left + extras[0]!;
   for (let i = 1; i < result.length; i++) {
-    const extra = i === result.length - 1 ? spare - allocated : Math.floor(spare * weights[i - 1]! / totalWeight);
-    allocated += extra;
-    result[i]!.x = result[i - 1]!.x + spacing[i - 1]! + extra;
+    result[i]!.x = result[i - 1]!.x + spacing[i - 1]! + extras[i]!;
   }
   return result;
 }
@@ -95,7 +115,7 @@ export function hazardPose(hazard: Encounter, time: number, settings = DEFAULTS.
 
 export function shotPosition(shot: Shot, time: number, life = DEFAULTS.enemies.shotLife): { x: number; y: number } | null {
   const age = time - shot.birth;
-  return age >= 0 && age < life ? { x: shot.x + shot.vx * age, y: shot.y + shot.vy * age } : null;
+  return time >= shot.birth && time < shot.birth + life ? { x: shot.x + shot.vx * age, y: shot.y + shot.vy * age } : null;
 }
 
 export function sweptHit(ax: number, ay: number, bx: number, by: number, halfWidth: number, halfHeight: number): boolean {

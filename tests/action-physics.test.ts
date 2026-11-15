@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulation, encounters, CHUNK } from '../src/simulation';
+import { Simulation, encounters } from '../src/simulation';
 import { DEFAULTS, JUMP_EFFECT_SECTIONS, parseTuning, tuningDocument } from '../src/tuning';
 
 const idle = { move: 0, jump: false, branch: false, merge: false };
@@ -116,33 +116,6 @@ describe('timing and migration', () => {
     expect(parseTuning(tuningDocument(migrated))).toEqual(migrated);
     expect(() => parseTuning({ format: 'forking-hell-tuning', version: 1, values: { ...old, crt: DEFAULTS.crt } })).toThrow();
     expect(() => parseTuning({ format: 'forking-hell-tuning', version: 1, values: { ...old, branches: { transition: .8 } } })).toThrow();
-  });
-});
-
-describe('irregular deterministic terrain', () => {
-  it('varies real gaps while preserving safe margins, motion envelopes and exact regenerated identities', () => {
-    const gaps = new Set<number>();
-    let previous = encounters(123, 0).at(-1)!;
-    for (let chunk = 1; chunk <= 100; chunk++) {
-      const list = encounters(123, chunk);
-      expect(list).toEqual(encounters(123, chunk));
-      expect(list[0]!.x - previous.x).toBeLessThan(CHUNK);
-      expect(list[0]!.x).toBeGreaterThanOrEqual(chunk * CHUNK + 64);
-      expect(list.at(-1)!.x).toBeLessThanOrEqual((chunk + 1) * CHUNK - 64);
-      for (let i = 1; i < list.length; i++) {
-        const gap = list[i]!.x - list[i - 1]!.x;
-        const radius = (kind: string) => 13 + (kind === 'patrol' ? 24 : 0);
-        expect(gap).toBeGreaterThanOrEqual(radius(list[i]!.kind) + radius(list[i - 1]!.kind) + 40);
-        gaps.add(gap);
-      }
-      previous = list.at(-1)!;
-    }
-    expect(gaps.size).toBeGreaterThan(50);
-    expect(Math.max(...gaps) - Math.min(...gaps)).toBeGreaterThan(180);
-    const game = new Simulation(123), original = game.nearby(4800, 5280);
-    for (let c = 11; c < 80; c++) game.nearby(c * CHUNK, (c + 1) * CHUNK);
-    game.branch(); settle(game);
-    expect(game.nearby(4800, 5280)).toEqual(original);
   });
 });
 

@@ -38,7 +38,7 @@ const sizeWarning = element('size-warning');
 const tune = element('tuning-panel');
 const notice = element('notice');
 let noticeReturn: HTMLElement | null = null;
-let nativeKeyActive = false;
+let blockedStartActivation: KeyboardEvent | null = null;
 const startButton = element<HTMLButtonElement>('start');
 const pauseButton = element<HTMLButtonElement>('pause');
 const reducedInput = element<HTMLInputElement>('reduced');
@@ -146,7 +146,7 @@ function introReady(): boolean {
   return ready && !started && viewportFits && tune.hidden && errorPanel.hidden && sizeWarning.hidden;
 }
 startButton.addEventListener('click', event => {
-  if (introReady() && !event.ctrlKey && !event.metaKey && !event.altKey && (event.detail !== 0 || !nativeKeyActive)) restart();
+  if (introReady() && !event.ctrlKey && !event.metaKey && !event.altKey && (event.detail !== 0 || !blockedStartActivation)) restart();
 });
 element('restart').addEventListener('click', () => restart());
 element('again').addEventListener('click', () => restart());
@@ -163,7 +163,7 @@ const tuningPanel = mountTuningPanel(() => tuning, (next, newRun) => {
 });
 pauseButton.addEventListener('click', pause);
 element('resume').addEventListener('click', resume);
-window.addEventListener('blur', () => { nativeKeyActive = false; pause(); });
+window.addEventListener('blur', () => { blockedStartActivation = null; pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('pagehide', e => {
   if (e.persisted) pause();
@@ -175,8 +175,10 @@ document.addEventListener('focusin', event => {
   }
 });
 document.addEventListener('keydown', event => {
-  // Firefox's native button click can omit the initiating key's modifiers.
-  nativeKeyActive = preservesNativeKey(event);
+  // Native button clicks can omit modifiers, including after modifier release.
+  if (!event.repeat && event.target === startButton && ['Enter', ' '].includes(event.key)) {
+    blockedStartActivation = preservesNativeKey(event) ? event : null;
+  }
   if (event.defaultPrevented || preservesNativeKey(event)) return;
   const target = event.target instanceof HTMLElement ? event.target : null;
   const consume = (): void => { event.preventDefault(); event.stopPropagation(); };
@@ -220,7 +222,13 @@ document.addEventListener('keydown', event => {
     consume(); restart();
   }
 }, true);
-document.addEventListener('keyup', event => { nativeKeyActive = preservesNativeKey(event); }, true);
+document.addEventListener('keyup', event => {
+  const activation = blockedStartActivation;
+  if (activation?.code === event.code) {
+    // Space activates after keyup dispatch; expire only after that default action.
+    setTimeout(() => { if (blockedStartActivation === activation) blockedStartActivation = null; }, 0);
+  }
+}, true);
 async function toggleFullscreen(): Promise<void> {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();

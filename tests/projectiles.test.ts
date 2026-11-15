@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { encounters, Simulation, STEP } from '../src/simulation';
+import { Simulation, STEP } from '../src/simulation';
+import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 
 const right = { move: 1, jump: false, branch: false, merge: false };
 function settle(game: Simulation): void { while (game.transition) game.step(); }
 function scene(depth: number) {
-  const game = new Simulation(123), shooter = encounters(123, 1)[0]!;
+  const game = new Simulation(SHOOTER_SEED), shooter = firstShooter();
   game.player.x = shooter.x - 100;
   game.player.invulnerable = 100;
   for (let d = 0; d < depth; d++) { game.branch(); settle(game); }

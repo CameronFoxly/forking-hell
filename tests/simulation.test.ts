@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ATTACK_RANGE, encounters, hazardPose, PLAYER_HEIGHT, PLAYER_WIDTH, SHOT_LIFE, shotPosition, Simulation, SPEED, STEP, sweptHit, UNIT } from '../src/simulation';
 import type { Input } from '../src/simulation';
+import { firstShooter } from './encounter-fixtures';
 
 const idle: Input = { move: 0, jump: false, branch: false, merge: false };
 function run(game: Simulation, seconds: number, input: Partial<Input> = {}): void {
@@ -188,7 +189,7 @@ describe('reversible hazards and stable projectile identities', () => {
 
   it('retains airborne history after conversion, separately from permission to replay it', () => {
     const game = new Simulation();
-    const shooter = encounters(game.seed, 1)[0]!;
+    const shooter = firstShooter(game.seed);
     game.player.x = shooter.x - ATTACK_RANGE + 60;
     game.branch(); settle(game);
     expect(game.isOrdinaryActive(1, shooter)).toBe(false);
@@ -205,7 +206,7 @@ describe('reversible hazards and stable projectile identities', () => {
 
   it('aims lower-layer shots at the upper player and preserves their launch across reversal', () => {
     const game = new Simulation();
-    const shooter = encounters(game.seed, 1)[0]!;
+    const shooter = firstShooter(game.seed);
     game.player.x = shooter.x - 90;
     game.branch(); settle(game);
     game.time = shooter.phase - STEP / 2;
@@ -302,7 +303,7 @@ describe('reversible hazards and stable projectile identities', () => {
 
   it('detects a reverse-moving projectile hitting the player through an active branch transition', () => {
     const game = new Simulation();
-    const shooter = encounters(game.seed, 1)[0]!;
+    const shooter = firstShooter(game.seed);
     game.player.x = shooter.x - 80;
     game.time = shooter.phase - STEP / 2;
     game.step({ ...idle, move: 1 });

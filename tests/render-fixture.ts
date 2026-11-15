@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import { parseCharacterAtlas } from '../src/character';
 import { applyPixelComposition } from '../src/pixel';
 import { WorldRenderer } from '../src/renderer';
-import { encounters, Simulation, STEP } from '../src/simulation';
+import { Simulation, STEP } from '../src/simulation';
+import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 import { attachCrt } from '../src/crt';
 import type { Tuning } from '../src/tuning';
 
@@ -59,9 +60,9 @@ class Probe extends Phaser.Scene {
       return { before, midair, landed, pulse, paused, reduced, expired, restarted, motion, time };
     };
     window.muzzleProbe = async kind => {
-      simulation = new Simulation(123);
+      simulation = new Simulation(SHOOTER_SEED);
       simulation.config.branches.liftDuration = .8; simulation.config.branches.collapseDuration = .2;
-      const shooter = encounters(123, 1)[0]!;
+      const shooter = firstShooter();
       simulation.player.x = shooter.x - 100;
       for (let n = 0; n < 2; n++) { simulation.branch(); while (simulation.transition) simulation.step(); }
       if (kind === 'branch') simulation.branch(); else simulation.merge();

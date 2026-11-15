@@ -3,6 +3,7 @@ import { DEFAULTS, needsRestart, parseTuning, tuningDocument } from '../src/tuni
 import { Simulation, STEP, encounters, hazardPose } from '../src/simulation';
 import { CameraRig } from '../src/camera';
 import { mergePitch } from '../src/audio';
+import { firstShooter } from './encounter-fixtures';
 
 const idle = { move: 0, jump: false, branch: false, merge: false };
 const tick = (game: Simulation, count: number, input = idle) => { for (let i = 0; i < count; i++) game.step(input); };
@@ -52,8 +53,8 @@ describe('complete versioned tuning', () => {
     expect(game.player.vy).toBeCloseTo(Math.sqrt(2 * 400 * 60) - 400 * STEP);
     const patrol = encounters(123, 0)[0]!;
     expect(hazardPose(patrol, .2, { ...config.enemies, patrolSpeed: 2 })).toEqual(hazardPose(patrol, .4, config.enemies));
-    const shooter = encounters(123, 1, { ...config.enemies, firingRate: 2 })[0]!;
-    expect(shooter.period).toBe(encounters(123, 1, { ...config.enemies, firingRate: 1 })[0]!.period / 2);
+    const shooter = firstShooter(123, { ...config.enemies, firingRate: 2 });
+    expect(shooter.period).toBe(firstShooter(123, { ...config.enemies, firingRate: 1 }).period / 2);
     config.camera.startZoom = 1;
     const camera = new CameraRig(); camera.reset(config.camera);
     expect(camera.zoom).toBe(1);

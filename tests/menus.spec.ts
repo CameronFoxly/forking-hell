@@ -43,6 +43,15 @@ for (const key of ['ArrowRight', 'Enter', 'Space', 'KeyQ', 'KeyW', 'KeyS']) {
   });
 }
 
+test('modified Space never starts when the modifier is released first', async ({ page }) => {
+  await countedIntro(page);
+  await page.keyboard.down('Control'); await page.keyboard.down('Space');
+  await page.keyboard.up('Control'); await page.keyboard.down('Space'); await page.keyboard.up('Space');
+  expect(await page.evaluate(() => window.forkingHell.snapshot().started)).toBe(false);
+  await page.keyboard.press('Space');
+  expect(await page.evaluate(() => window.forkingHell.snapshot().started)).toBe(true);
+});
+
 test('intro navigation, shortcuts, composition and Tune editing never start behind a menu', async ({ page }) => {
   test.setTimeout(60000);
   await countedIntro(page);

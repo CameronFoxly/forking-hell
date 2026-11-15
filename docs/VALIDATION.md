@@ -1,5 +1,25 @@
 # Validation
 
+## Current source: varied encounter progression and final input boundaries
+
+**96 unit tests and strict TypeScript/build passed.** Across the focused browser runs, 122 distinct applicable checks passed and six CDP-only cases were intentionally skipped. The final 60-case menu/projectile rerun passed across Chromium, Firefox, WebKit and DPR3 Chromium touch; the other 62 checks cover general gameplay/recovery, double jump, native touch ownership, exact world-pixel rendering and eased geometry/shake. This is not a full-suite or physical-phone claim.
+
+Realized generation measurements use 16 fixed seeds, eight chunks per distance window, and include gaps across chunk seams:
+
+| World X window | Mean center gap | Mean motion-envelope clearance | Encounters/chunk | Shooter share |
+| --- | --- | --- | --- | --- |
+| 0-3,840 | 262.8 px | 220.6 px | 1.77 | 9.3% |
+| 5,760-9,600 | 171.8 px | 133.6 px | 2.77 | 26.3% |
+| 19,200-23,040 | 134.6 px | 100.3 px | 3.54 | 46.6% |
+
+Center-gap 10th/90th percentiles are 132/448, 92/268 and 82/203 pixels respectively; interquartile widths remain 155, 90 and 59 pixels rather than tiny grid jitter. Every checked motion envelope has at least 40 pixels of clearance, including seams at patrol radii 0, 24 and 60 across 80 chunks per seed. The 640-pixel maximum center gap, variable counts, bounded cache and exact regeneration after distant queries, reversal and nested branch actions are covered. The new opening-density regression failed against the old generator before implementation.
+
+Projectile scenarios now find actual shooters rather than assuming chunk 1's first enemy is always one. The real-control fixture uses a naturally occurring early shooter (seed 116), forks away from the widened opening spinner, and waits for the requested depth as well as completed lift. Its changed firing timestamp exposed subtraction-rounding at exact expiry: checking absolute birth/expiry timestamps now consistently retires converted/removed-source flight at the boundary. Already-airborne shots still survive independently only until their next birth/expiry boundary; living lower counterparts remain active.
+
+Final shortcut checks also cover releasing Control before a held Space. The original rejected activation is retained through Space's native keyup click, preventing an accidental start without canceling the shortcut. All 52 menu cases pass, including this cross-browser regression.
+
+A bounded, keyboard-controlled desktop/mobile-layout route traveled from X64 to roughly X6,840 without teleportation, altered tuning or damage. Opening captures show four rendered copies and no nearby shooters; later captures show ten copies and two active lower shooters, with switches only above. Both layouts retained all three hearts and reported no runtime errors. Session evidence: `generation-distributions.json`, `generation-review/evidence.json`, four opening/later screenshots and `input-projectile-final.log`. Existing v3 defaults are unchanged. Source and build remain local; the public site and ZIP are unchanged.
+
 ## Keyboard menus and readiness-gated start
 
 **92 existing unit tests, strict TypeScript/build and all 48 keyboard-menu browser cases passed** across Chromium, Firefox, WebKit and DPR3 Chromium touch. The broader `browser` suite also passed its 41 applicable cases, with three CDP-only skips. Keyboard acceptance covers six starting keys, held/repeated input, native shortcuts and IME, all jump-particle Tune sections, keyboard export/Reset, pause/settings/results, notice dismissal, loading, failed artwork recovery and undersized viewports. The starting key is consumed until release; no gameplay action leaks from it.
