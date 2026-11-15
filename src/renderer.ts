@@ -80,8 +80,7 @@ export class WorldRenderer {
       this.presentation.resize(width, height);
     }
     const worldWidth = this.composition.width, worldHeight = this.composition.height;
-    const hit = game.bursts.find(b => b.kind === 'hit');
-    const shake = !view.reducedMotion && hit && hit.age < effects.shakeDuration ? Math.round(Math.sin(hit.age * effects.shakeFrequency) * effects.shakeAmount) : 0;
+    const shake = !view.reducedMotion && game.shakeAge < effects.shakeDuration ? Math.round(Math.sin(game.shakeAge * effects.shakeFrequency) * effects.shakeAmount) : 0;
     this.cameraX = Math.floor(this.camera.left);
     this.sourceLeft = this.cameraX - 4;
     this.sourceTop = Math.ceil(this.camera.top) + 4;

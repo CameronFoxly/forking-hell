@@ -2,7 +2,7 @@
 
 ## Two clocks
 
-`src/simulation.ts` is engine-independent. A positive fixed 1/60-second step advances player gravity, damage cooldowns, transitions and physical coins. Player movement is 90 source pixels/second, gravity 850, and full-held jump height 38. Releasing jump caps remaining ballistic energy toward an apex between half and full height. Ballistic rise excludes support lift, maintaining a 2:1 tap/full envelope as tuning changes. A new press is required after landing.
+`src/simulation.ts` is engine-independent. A positive fixed 1/60-second step advances player gravity, damage cooldowns, transitions and physical coins. Player movement is 121 source pixels/second, gravity 680, and full-held jump height 56. Releasing jump caps remaining ballistic energy toward an apex between half and full height. Ballistic rise excludes support lift, maintaining a 2:1 tap/full envelope as tuning changes. A new press is required after landing.
 
 Environmental time changes by **actual controlled horizontal displacement / configured movement speed**. An obstructed player does not advance it. Patrol positions, spinner angles, trap phases and projectile trajectories are analytical functions of that signed clock. There is no negative physics timestep. Falling can collide with a stationary hazard.
 
@@ -12,11 +12,11 @@ The player-specific animation is forward-only, following the supplied animation 
 
 | Clip | Frames | Timing |
 | --- | --- | --- |
-| Idle | 5, first row | 200 ms |
-| Walk | 5, second row | 60 ms |
-| Jump_Up | 4, third row | One launch draw, then 60 ms; loop last two |
-| JumpDown | 4, fourth row | Restart at apex; 60 ms, loop last two |
-| Land | First cell, fifth row | At least one draw, then 1/15 second |
+| Idle | 5, first row | 240 ms |
+| Walk | 5, second row | 50 ms |
+| Jump_Up | 4, third row | One launch draw, then 50 ms; loop last two |
+| JumpDown | 4, fourth row | Restart at apex; 50 ms, loop last two |
+| Land | First cell, fifth row | At least one draw, then 60 ms |
 
 The last nonzero movement input controls facing; left movement mirrors rather than reversing pose order. The renderer advances animation once per draw and guards the first launch/landing frames even if several physics steps occur.
 
@@ -60,7 +60,7 @@ Every world sprite uses one native texel per world pixel and the same camera tra
 
 `src/pixel.ts` installs an actual Phaser 4 **internal GameObject Filter** on the native world composition, before camera zoom. Sprites, geometry, links and particles first rasterize at one source texel per world pixel. The filter samples these native pixel centers and applies the ten-color palette. Its result is baked to `presentation`, then transformed once by the camera into the physical output buffer. The world targets start at 1008x572 and grow only when a lower configured zoom needs more coverage (up to 1608x908 at 0.3); they never downsample sprites to a fixed 480x270 post-zoom world first.
 
-After palette filtering, bounded optional channel fringes use real object poses in native world pixels. Stable platform anchors and separate actual connector endpoints exclude camera displacement; monotonic action time retains motion between fixed ticks at high refresh rates. Camera projection follows, then the HUD and a static monitor-space CRT filter. Optical separation interpolates neighboring samples along the optical ray so subpixel settings do not disappear through nearest-neighbor rounding. This does not change the native world texture or its palette/zoom projection. Four cached shader variants separate narrow/wide optics and glow: the ordinary default path uses seven texture samples, matching the previous shader's count, while combined wide effects use at most seventeen. Wide glow uses a fixed, bounded twelve-tap kernel; ordinary small-radius glow uses four taps. Normal-mode values are not silently capped below the exposed tuning ranges.
+After palette filtering, bounded optional channel fringes use real object poses in native world pixels. Stable platform anchors and separate actual connector endpoints exclude camera displacement; monotonic action time retains motion between fixed ticks at high refresh rates. Camera projection follows, then the HUD and a static monitor-space CRT filter. Optical separation interpolates neighboring samples along the optical ray so subpixel settings do not disappear through nearest-neighbor rounding. This does not change the native world texture or its palette/zoom projection. Four cached shader variants separate narrow/wide optics and glow: the narrow path uses seven texture samples, while combined wide effects use at most seventeen. The selected preset and viewport determine the variant; stronger defaults can select the wider path. Wide glow uses a fixed, bounded twelve-tap kernel; ordinary small-radius glow uses four taps. Normal-mode values are not silently capped below the exposed tuning ranges.
 
 Motion is independently disabled by reduced effects or pause. CRT uses explicit reduced-effects caps and bypasses buffers above its 4096-dimension/4K-area budget, never by resampling. Recovery or disabling CRT clears only the CRT-owned budget notice, preserving unrelated warnings. DOM menus remain unfiltered and usable even at extreme canvas treatment.
 

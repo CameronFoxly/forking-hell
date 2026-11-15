@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { CharacterAnimation, parseCharacterAtlas } from '../src/character';
 import { JUMP_HEIGHT, Simulation, STEP } from '../src/simulation';
+import { DEFAULTS } from '../src/tuning';
 
 const raw = JSON.parse(readFileSync(new URL('../public/assets/octocat.json', import.meta.url), 'utf8'));
 const atlas = parseCharacterAtlas(raw, 130, 135);
@@ -22,7 +23,7 @@ describe('sprite-tester character contract', () => {
     expect(() => parseCharacterAtlas(bad, 130, 135)).toThrow();
   });
 
-  it('shows launch once, loops the last two ascent/descent frames, and holds landing for 1/15s', () => {
+  it('shows launch once, loops the last two ascent/descent frames, and honors the configured landing hold', () => {
     const animation = new CharacterAnimation(atlas);
     animation.jumped();
     animation.update(0.1, false, 200, 1);
@@ -30,32 +31,34 @@ describe('sprite-tester character contract', () => {
     animation.afterDraw();
     expect(animation.index).toBe(1);
     for (const expected of [2, 3, 2, 3]) {
-      animation.update(0.06, false, 100, 1);
+      animation.update(DEFAULTS.character.jumpMs / 1000, false, 100, 1);
       expect(animation.index).toBe(expected);
       animation.afterDraw();
     }
-    animation.update(0.06, false, 0, -1);
+    animation.update(DEFAULTS.character.jumpMs / 1000, false, 0, -1);
     expect([animation.clip, animation.index]).toEqual(['JumpDown', 0]);
     for (const expected of [1, 2, 3, 2]) {
-      animation.afterDraw(); animation.update(0.06, false, -100, -1);
+      animation.afterDraw(); animation.update(DEFAULTS.character.jumpMs / 1000, false, -100, -1);
       expect(animation.index).toBe(expected);
     }
     animation.landed(); animation.update(0.1, true, 0, -1);
     expect(animation.clip).toBe('Land');
-    animation.afterDraw(); animation.update(1 / 30, true, 0, 1);
+    animation.afterDraw(); animation.update(DEFAULTS.character.landMs / 2000, true, 0, 1);
     expect(animation.clip).toBe('Land');
-    animation.afterDraw(); animation.update(1 / 30, true, 0, 1);
+    animation.afterDraw(); animation.update(DEFAULTS.character.landMs / 2000, true, 0, 1);
     expect([animation.clip, animation.index]).toEqual(['Walk', 0]);
   });
 
   it('keeps current facing when stopped, loops Idle/Walk forward, and can jump during Land', () => {
     const animation = new CharacterAnimation(atlas);
-    animation.update(0.1, true, 0, 0); animation.afterDraw();
-    animation.update(0.1, true, 0, 0);
+    const idleSteps = Math.ceil(DEFAULTS.character.idleMs / 100);
+    for (let i = 0; i < idleSteps; i++) {
+      animation.update(DEFAULTS.character.idleMs / idleSteps / 1000, true, 0, 0); animation.afterDraw();
+    }
     expect([animation.clip, animation.index]).toEqual(['Idle', 1]);
-    animation.update(0.06, true, 0, -1);
+    animation.update(DEFAULTS.character.walkMs / 1000, true, 0, -1);
     expect([animation.clip, animation.index]).toEqual(['Walk', 0]);
-    animation.update(0.06, true, 0, -1);
+    animation.update(DEFAULTS.character.walkMs / 1000, true, 0, -1);
     expect(animation.index).toBe(1);
     animation.landed(); animation.jumped(); animation.update(0.1, false, 100, 0);
     expect([animation.clip, animation.index]).toEqual(['Jump_Up', 0]);
@@ -65,7 +68,7 @@ describe('sprite-tester character contract', () => {
     expect(game.player.facing).toBe(-1);
   });
 
-  it('matches the 38px kinematic jump and emits one airborne-to-grounded event', () => {
+  it('matches the configured full-held jump and emits one airborne-to-grounded event', () => {
     const game = new Simulation();
     game.step({ move: 0, jump: true, branch: false, merge: false });
     let peak = game.player.y;

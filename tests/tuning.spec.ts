@@ -13,6 +13,7 @@ const current = (page: Page) => page.evaluate(() => window.forkingHell.diagnosti
 
 test('tuning owns keyboard focus, edits live, and exports/imports complete effective JSON', async ({ page }) => {
   await start(page);
+  expect(await current(page)).toEqual(DEFAULTS);
   await page.keyboard.down('KeyD');
   await page.locator('#tuning-toggle').click();
   const frozen = await page.evaluate(() => window.forkingHell.snapshot().x);
@@ -37,14 +38,19 @@ test('tuning owns keyboard focus, edits live, and exports/imports complete effec
   const document = JSON.parse(Buffer.concat(parts).toString());
   expect(document).toEqual(tuningDocument({ ...DEFAULTS, character: { ...DEFAULTS.character, speed: 120 } }));
   document.values.character.speed = 150;
+  document.values.crt.scanlinesEnabled = 1;
+  document.values.crt.scanlineStrength = .4;
+  document.values.crt.scanlinePeriod = 6;
+  document.values.crt.hudStrength = .4;
+  document.values.motion.strength = .2;
   const chooser = page.waitForEvent('filechooser');
   await page.locator('#tuning-import').focus(); await page.keyboard.press('Space');
   await (await chooser).setFiles({ name: 'tuning.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document)) });
-  await expect.poll(async () => (await current(page)).character.speed).toBe(150);
+  await expect.poll(() => current(page)).toEqual(document.values);
   document.version = 100;
   await page.locator('#tuning-file').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document)) });
   await expect(page.locator('#tuning-status')).toContainText('Unsupported');
-  expect((await current(page)).character.speed).toBe(150);
+  expect(await current(page)).toEqual(document.values);
   await page.locator('#tuning-reset').focus(); await page.keyboard.press('Space');
   expect(await current(page)).toEqual(DEFAULTS);
   await expect(page.locator('#tuning-panel')).toBeVisible();
@@ -123,23 +129,31 @@ test('native touch tap and hold measure half/full jump height and cancel release
     await expect(page.locator('[data-control="jump"]')).not.toHaveClass(/pressed/);
     await page.locator('#jump-apex-evidence').evaluate(e => e.remove());
   }
-  expect(Math.abs(peaks[0]! - 19)).toBeLessThan(.4);
-  expect(Math.abs(peaks[1]! - 38)).toBeLessThan(.4);
+  expect(Math.abs(peaks[0]! - DEFAULTS.physics.jumpHeight / 2)).toBeLessThan(.4);
+  expect(Math.abs(peaks[1]! - DEFAULTS.physics.jumpHeight)).toBeLessThan(.4);
 });
 
 test('staged lineage reaches all ancestors and holding merge stops on release', async ({ page }) => {
   await start(page);
-  for (let d = 1; d <= 4; d++) await fork(page, d);
+  for (let d = 1; d <= 6; d++) await fork(page, d);
   await page.keyboard.down('KeyD'); await page.waitForFunction(() => window.forkingHell.snapshot().staged.includes('0:0')); await page.keyboard.up('KeyD');
-  await expect.poll(() => page.evaluate(() => window.forkingHell.diagnostics().highlightedCopies)).toBe(5);
+  await expect.poll(() => page.evaluate(() => window.forkingHell.diagnostics().highlightedCopies)).toBe(7);
+  await page.evaluate(() => {
+    window.addEventListener('keyup', () => {
+      const state = window.forkingHell.snapshot();
+      document.body.dataset.releaseDepth = String(state.depth - Number(state.transition === 'merge'));
+    }, { once: true, capture: true });
+  });
   await page.keyboard.down('KeyS');
-  await page.waitForFunction(() => window.forkingHell.snapshot().depth === 3 && window.forkingHell.snapshot().transition === 'merge');
+  await page.waitForFunction(() => window.forkingHell.snapshot().depth === 5 && window.forkingHell.snapshot().transition === 'merge');
   await page.keyboard.up('KeyS');
+  const acceptedDepth = await page.evaluate(() => Number(document.body.dataset.releaseDepth));
+  expect(acceptedDepth).toBeGreaterThan(0);
   await page.waitForTimeout(500);
-  expect(await page.evaluate(() => window.forkingHell.snapshot().depth)).toBe(2);
+  expect(await page.evaluate(() => window.forkingHell.snapshot().depth)).toBe(acceptedDepth);
   expect(await page.evaluate(() => window.forkingHell.snapshot().mergeCombo)).toBe(0);
   await page.keyboard.down('KeyS'); await page.waitForFunction(() => window.forkingHell.snapshot().depth === 0); await page.keyboard.up('KeyS');
-  expect(await page.evaluate(() => window.forkingHell.snapshot().converted)).toBe(4);
+  expect(await page.evaluate(() => window.forkingHell.snapshot().converted)).toBe(6);
 });
 
 test('mobile repeated taps and holds avoid selection while tuning numbers remain editable', async ({ page, context }, info) => {

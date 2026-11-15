@@ -7,7 +7,7 @@ const ticks = (game: Simulation, count: number, input = idle) => { for (let n = 
 const settle = (game: Simulation) => { while (game.transition && !game.gameOver) game.step(); };
 
 describe('variable jump energy', () => {
-  it.each([[850, 38], [150, 120], [1800, 12]])('measures a 2:1 apex envelope at gravity %i and full height %i', (gravity, height) => {
+  it.each([[DEFAULTS.physics.gravity, DEFAULTS.physics.jumpHeight], [150, 120], [1800, 12]])('measures a 2:1 apex envelope at gravity %i and full height %i', (gravity, height) => {
     const peaks = [];
     for (const hold of [1, 3, 6, 1000]) {
       const game = new Simulation();
@@ -31,7 +31,7 @@ describe('variable jump energy', () => {
       game.branch();
       let peak = 0;
       for (let n = 0; n < 90; n++) { game.step({ ...idle, jump: n < hold }); peak = Math.max(peak, game.player.y); }
-      expect(Math.abs(peak - (hold === 1 ? 19 : 38))).toBeLessThan(.15);
+      expect(Math.abs(peak - game.config.physics.jumpHeight / (hold === 1 ? 2 : 1))).toBeLessThan(.15);
       expect(game.time).toBe(0);
     }
     const game = new Simulation(); ticks(game, 4, { ...idle, jump: true, move: -1 });
@@ -40,6 +40,47 @@ describe('variable jump energy', () => {
     game.setPaused(false); ticks(game, 90);
     expect(game.player.grounded).toBe(true);
     expect(game.events.filter(event => event === 'jump')).toHaveLength(1);
+  });
+});
+
+describe('merge landing feedback', () => {
+  it.each([0, 2])('starts one pulse only at completion with %i staged targets', targets => {
+    const game = new Simulation(123);
+    game.branch(); settle(game);
+    for (let i = 0; i < targets; i++) game.stage(`0:${i}`);
+    game.merge();
+    const steps = Math.ceil(game.config.branches.collapseDuration * 60);
+    expect(game.shakeAge).toBe(Infinity);
+    ticks(game, steps - 1);
+    expect(game.shakeAge).toBe(Infinity);
+    game.step();
+    expect(game.shakeAge).toBe(0);
+    expect(game.events.filter(event => event === 'merge')).toHaveLength(1);
+    expect(game.events.filter(event => event === 'destroy')).toHaveLength(targets);
+    game.step();
+    const age = game.shakeAge;
+    expect(age).toBeCloseTo(1 / 60);
+    game.setPaused(true); ticks(game, 30);
+    expect(game.shakeAge).toBe(age);
+    game.setPaused(false); ticks(game, 30);
+    expect(game.shakeAge).toBeGreaterThan(game.config.effects.shakeDuration);
+    expect(game.time).toBe(0);
+    expect(new Simulation().shakeAge).toBe(Infinity);
+  });
+  it('pulses each held landing but release stops new merges, not the accepted collapse', () => {
+    const game = new Simulation();
+    for (let i = 0; i < 3; i++) { game.branch(); settle(game); }
+    const steps = Math.ceil(game.config.branches.collapseDuration * 60);
+    ticks(game, steps, { ...idle, merge: true });
+    expect(game.shakeAge).toBe(0); expect(game.depth).toBe(2);
+    game.step({ ...idle, merge: true });
+    game.endMergeHold(); game.step();
+    expect(game.transition?.kind).toBe('merge');
+    settle(game);
+    expect(game.shakeAge).toBe(0); expect(game.depth).toBe(1);
+    ticks(game, 60);
+    expect(game.events.filter(event => event === 'merge')).toHaveLength(2);
+    expect(game.depth).toBe(1);
   });
 });
 
@@ -125,11 +166,12 @@ describe('landing rewards and local coin physics', () => {
     const game = new Simulation();
     for (let d = 0; d < 4; d++) { game.branch(); settle(game); }
     game.stage('0:0');
+    const receivingDepth = game.depth - 1;
     game.merge(); ticks(game, 10);
     expect(game.destructionScore).toBe(0); expect(game.coins.size).toBe(0);
     while (!game.coins.size) game.step();
     const target = game.pose(encounters(game.seed, 0)[0]!);
-    expect(game.surfaceAt(game.depth, target.x).height).toBeLessThanOrEqual(game.surfaceAt(game.depth - 1, target.x).height + 17);
+    expect(game.surfaceAt(game.depth, target.x).height).toBeLessThanOrEqual(game.surfaceAt(receivingDepth, target.x).height + 17);
     expect(game.events.filter(event => event === 'destroy')).toHaveLength(1);
     settle(game);
     ticks(game, 80, { ...idle, merge: true });

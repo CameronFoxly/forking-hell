@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { DEFAULTS } from '../src/tuning';
 
 test('keyboard-only menus preserve native editing and restore clean gameplay input', async ({ page }) => {
   await page.goto('/');
@@ -37,9 +38,9 @@ test('keyboard-only menus preserve native editing and restore clean gameplay inp
   await page.keyboard.press('Tab');
   await expect(page.locator('#tune-character-speed')).toBeFocused();
   await page.keyboard.press('ArrowUp'); await page.keyboard.press('Tab');
-  expect(await page.evaluate(() => window.forkingHell.diagnostics().tuning.values.character.speed)).toBe(91);
+  expect(await page.evaluate(() => window.forkingHell.diagnostics().tuning.values.character.speed)).toBe(DEFAULTS.character.speed + 1);
   await page.keyboard.press('ArrowRight');
-  expect(await page.evaluate(() => window.forkingHell.diagnostics().tuning.values.character.speed)).toBe(92);
+  expect(await page.evaluate(() => window.forkingHell.diagnostics().tuning.values.character.speed)).toBe(DEFAULTS.character.speed + 2);
   await page.keyboard.press('Escape');
   await expect(page.locator('#tuning-toggle')).toBeFocused();
   await expect(page.locator('#tuning-panel')).toBeHidden();

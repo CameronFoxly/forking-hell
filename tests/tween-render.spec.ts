@@ -6,8 +6,8 @@ test('early, mid and late eased connectors meet the commit center and platform b
   await page.waitForFunction(() => Boolean(window.tweenProbe));
   const samples = await page.evaluate(async () => {
     const samples = [];
-    for (const kind of ['branch', 'merge'] as const) for (const nested of [false, true, 'backtracked'] as const) for (const zoom of [.88, .48]) for (const steps of [3, 10, 20]) {
-      const p = await window.tweenProbe(kind, steps, nested, zoom);
+    for (const kind of ['branch', 'merge'] as const) for (const nested of [false, true, 'backtracked'] as const) for (const zoom of [.88, .48]) for (const progress of [.15, .5, .95]) {
+      const p = await window.tweenProbe(kind, progress, nested, zoom);
       const image = new Image(); image.src = p.image; await image.decode();
       const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
       const ctx = canvas.getContext('2d')!; ctx.drawImage(image, 0, 0);
@@ -17,7 +17,7 @@ test('early, mid and late eased connectors meet the commit center and platform b
         return (data[i]! << 16) | (data[i + 1]! << 8) | data[i + 2]!;
       };
       samples.push({
-        kind, nested, zoom, steps, worldY: p.worldY,
+        kind, nested, zoom, progress, worldY: p.worldY,
         colors: p.points.map(([x, y]) => color(x!, y!)),
         end: color(p.end[0]!, p.end[1]! + 1),
         aboveEnd: color(p.end[0]! + 1, p.end[1]! - 1),
@@ -32,4 +32,16 @@ test('early, mid and late eased connectors meet the commit center and platform b
     expect(p.center).toBe(0x75f6ec);
     expect(p.aboveEnd).not.toBe(0x75f6ec);
   }
+});
+
+test('merge landing shake is pixel-aligned, paused/reduced safely, and excluded from motion velocity', async ({ page }) => {
+  test.skip(Boolean(process.env.PREVIEW_URL), 'Test-only renderer fixture is not distributed.');
+  await page.goto('/tests/render-fixture.html');
+  await page.waitForFunction(() => Boolean(window.shakeProbe));
+  const result = await page.evaluate(() => window.shakeProbe());
+  expect(result.before).toBe(0); expect(result.midair).toBe(0); expect(result.landed).toBe(0);
+  expect(Math.abs(result.pulse)).toBeCloseTo(2);
+  expect(result.paused).toBe(result.pulse); expect(result.reduced).toBe(0);
+  expect(result.expired).toBe(0); expect(result.restarted).toBe(0);
+  expect(result.motion).toBe(0); expect(result.time).toBe(0);
 });

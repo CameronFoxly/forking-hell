@@ -12,15 +12,17 @@ Complete historical v1 documents are migrated explicitly: the old branch shape h
 
 ## Timing and feedback
 
-`branches.liftDuration` and `branches.collapseDuration` are independent authoritative durations. Both initially default to 0.34 seconds (21 fixed simulation steps). `liftEase` and `collapseEase` are easing powers: 1 is linear, 3 is cubic. Geometry, support, colliders and attached objects share those surfaces. Held-merge scheduling follows collapse completion, never lift duration.
+`branches.liftDuration` and `branches.collapseDuration` are independent authoritative durations, initially 0.34 and 0.2 seconds (21 and 12 fixed simulation steps). `liftEase` and `collapseEase` are easing powers, initially 3 and 4.7: 1 is linear, 3 is cubic. Geometry, support, colliders and attached objects share those surfaces. Held-merge scheduling follows collapse completion, never lift duration.
 
-`physics.jumpHeight` is the **full-held maximum**, initially 38 world pixels. A minimum tap reaches half that height; intermediate holds fill the range. Changing height or gravity preserves the 2:1 launch contract, with fixed-step apex sampling tolerance. Holding after landing does not jump again.
+`physics.jumpHeight` is the **full-held maximum**, initially 56 world pixels. A minimum tap reaches half that height; intermediate holds fill the range. Changing height or gravity preserves the 2:1 launch contract, with fixed-step apex sampling tolerance. Holding after landing does not jump again.
 
 `coins.popSpeed` and `spread` control seeded launch velocity. `gravity`, `bounce` (restitution), `friction` (horizontal velocity retained at surface impacts), and `shimmer` control forward-clock drops. Explicit pause freezes motion. Coins bounce on the shared moving support and against nearby coins; distant drops sleep without changing rewards.
 
 `branches.holdDelay` defaults to zero: holding Merge starts the next collapse on the first step after the current tween settles. A nonnegative delay adds only an explicit extra pause; it can never allow overlapping tweens. Release/cancel ends further scheduling, not an already accepted action. New branching, pause/focus loss and restart also end the hold/combo.
 
 `audio.mergePitchStep` controls semitones per completed layer, capped at two octaves. `audio.successThreshold` defaults to four completed held merges, producing one success flourish per uninterrupted hold. Sound mute remains authoritative. `effects.highlightStrength` tunes ancestry links/brackets; activated sprite colors remain as a separate state cue. Reduced shake/flashes suppresses shaking and glow pulsing and reduces particle travel.
+
+**Impact shake** shares `effects.shakeAmount`, `shakeDuration` and `shakeFrequency` between hits and completed merge landings. Each completed layer starts one bounded pixel-aligned pulse, including empty merges; target count does not multiply it. Releasing Merge stops future repeats but the accepted collapse still lands. Pause freezes the pulse, restart clears it, and reduced effects suppresses it. Shake affects presentation only, never support geometry, environmental time or motion-fringe velocity.
 
 ## CRT ranges and effective state
 
@@ -35,7 +37,7 @@ Defaults and the complete v2 document shape are unchanged; existing v2 presets s
 | Curvature | 0-0.25 |
 | Canvas HUD / splash treatment | 0-1 |
 
-Enable the master CRT switch and each desired effect. Disabled subordinate controls retain their values and show `[off]`; amounts never enable their parent implicitly. The live status names the optical amount used by this viewport and explains why treatment is inactive. Intro treatment uses the HUD/splash amount (20% by default), not the full gameplay-world amount. DOM buttons, menus and Tune remain unfiltered for readability.
+Enable the master CRT switch and each desired effect. Disabled subordinate controls retain their values and show `[off]`; amounts never enable their parent implicitly. Scanlines initially remain off, retaining depth 0.16 and spacing 4.75 CSS pixels. The live status names the optical amount used by this viewport and explains why treatment is inactive. Intro treatment uses the HUD/splash amount (100% by default). DOM buttons, menus and Tune remain unfiltered for readability.
 
 Reduced effects cap optical split at 0.25 CSS pixels, glow strength at 0.08, glow radius at 3 CSS pixels, scanline depth at 0.125 (and half the selected depth), and disable curvature. Those overrides are shown in Tune. Normal mode has no former 0.25-strength / 3-CSS-pixel glow clamp. Buffers beyond the GPU dimension/area budget bypass CRT with an owned notice that clears on recovery; high settings still cost GPU time below that budget. No automatic resolution reduction hides that cost.
 

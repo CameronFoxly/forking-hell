@@ -1,8 +1,18 @@
 # Validation
 
-## Projectile and CRT follow-up: current local source
+## Latest source defaults and merge landing shake
 
-The current source and production build include the projectile/CRT fixes below. **They are not a new ZIP or public deployment.** The previous published release and package evidence are retained separately below.
+The complete `forking-hell-tuning-v2 (5).json` preset supplies fresh-load and Reset defaults, superseding the earlier `(3)` file. Source JSON, strict parsing, fresh browser initialization, Reset after restart-required edits, and an actual downloaded export all match every supplied value. Scanlines remain disabled with depth 0.16 and spacing 4.75 retained; HUD/splash strength remains 1.
+
+**80 unit tests, strict TypeScript/build and 104 browser checks passed**, with 12 intended skips in the complete 116-case browser run. The actual tap/full jump apexes retain the 2:1 envelope at 28/56 world pixels. Landing feedback cases cover empty and multiple-target merges, held chains, release, pause and restart. The renderer checks the bounded two-world-pixel pulse, reduced-effects suppression and zero shake-induced motion fringes/environmental time. The pulse starts at merge completion, not acceptance or individual target conversion.
+
+Default-dependent fixtures now use configured durations/speeds or explicitly pin their scripted reproduction settings. The faster collapse exposed a keyboard-release test's stale remote snapshot; it now observes the accepted collapse at the actual keyup event, matching the native cancellation test. No input mechanics were changed. The final review ran in an isolated browser, without manually resetting the user's tuning tab.
+
+Its stronger CRT settings differ from those used for the historical performance comparison below; those timings are not measurements of this new preset. This is a local source/build update, not a new ZIP or public deployment.
+
+## Projectile and CRT follow-up: source commit `32a9980`
+
+That source and production build introduced the projectile/CRT fixes below. **They were not a new ZIP or public deployment.** The previous published release and package evidence are retained separately below.
 
 - **77 unit tests, strict TypeScript and the production build passed.**
 - **100 browser checks passed, 12 intentionally skipped**, in the final complete 112-case run after shader optimization: Chromium, Firefox, WebKit and DPR3 Chromium touch. The skips are CDP-only touch/GPU-budget cases outside their supported projects. Exact native-grid, palette and final-sample checks retain their integrity thresholds.

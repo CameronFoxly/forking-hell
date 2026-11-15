@@ -20,7 +20,7 @@ describe('independent player and environmental clocks', () => {
     run(game, 1);
     expect(game.player.y).toBe(0);
     expect(game.time).toBeCloseTo(0);
-    expect(game.distanceScore).toBe(5);
+    expect(game.distanceScore).toBe(Math.floor(game.config.character.speed * .5 / UNIT) * 5);
   });
 
   it('freezes at a blocked left boundary and pauses both clocks', () => {
@@ -213,7 +213,7 @@ describe('reversible hazards and stable projectile identities', () => {
     const shot = [...game.shots.values()].find(s => s.branchId === 0 && s.birth === shooter.phase)!;
     expect(shot.vy).toBeGreaterThan(0);
     const launch = { ...shot };
-    const travel = Math.hypot(game.player.x - shot.x, game.playerWorldY + PLAYER_HEIGHT / 2 - shot.y) / 86;
+    const travel = Math.hypot(game.player.x - shot.x, game.playerWorldY + PLAYER_HEIGHT / 2 - shot.y) / game.config.enemies.shotSpeed;
     game.time = shot.birth + travel;
     game.step();
     expect(game.player.health).toBeLessThan(3);
@@ -250,9 +250,9 @@ describe('reversible hazards and stable projectile identities', () => {
     game.branch(); settle(game);
     game.player.x = 232;
     game.merge();
-    run(game, 0.1);
+    game.step();
     expect(game.player.health).toBe(3);
-    run(game, 0.2);
+    run(game, game.config.branches.collapseDuration - 2 * STEP);
     expect(game.transition).not.toBeNull();
     expect(game.player.health).toBe(3);
     game.step();
@@ -307,7 +307,7 @@ describe('reversible hazards and stable projectile identities', () => {
     game.time = shooter.phase - STEP / 2;
     game.step({ ...idle, move: 1 });
     const shot = [...game.shots.values()].find(s => s.birth === shooter.phase)!;
-    const travel = 80 / 86;
+    const travel = 80 / game.config.enemies.shotSpeed;
     game.time = shot.birth + travel + STEP;
     game.branch();
     expect(game.transition).not.toBeNull();

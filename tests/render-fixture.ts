@@ -11,9 +11,10 @@ type JunctionResult = { image: string; left: number; top: number; forks: { x: nu
 declare global { interface Window {
   renderProbe: (zoom: number, pan: number, scale: number) => Promise<ProbeResult>;
   junctionProbe: (staged: boolean, merges: number, pan: number) => Promise<JunctionResult>;
-  tweenProbe: (kind: 'branch' | 'merge', steps: number, nested: boolean | 'backtracked', zoom: number) => Promise<{ image: string; left: number; top: number; points: number[][]; end: number[]; foot: number[]; worldY: number }>;
+  tweenProbe: (kind: 'branch' | 'merge', progress: number, nested: boolean | 'backtracked', zoom: number) => Promise<{ image: string; left: number; top: number; points: number[][]; end: number[]; foot: number[]; worldY: number }>;
   effectProbe: (enabled: boolean, config?: Partial<Tuning['crt']>, started?: boolean, mobile?: boolean) => Promise<string>;
   muzzleProbe: (kind: 'branch' | 'merge') => Promise<{ image: string; left: number; top: number; points: { x: number; y: number }[] }>;
+  shakeProbe: () => Promise<{ before: number; midair: number; landed: number; pulse: number; paused: number; reduced: number; expired: number; restarted: number; motion: number; time: number }>;
 } }
 class Probe extends Phaser.Scene {
   preload(): void {
@@ -33,6 +34,30 @@ class Probe extends Phaser.Scene {
     const frame = atlas.Idle[0]!;
     const draw = (): void => world.draw(simulation, { started: true, reducedMotion: true, best: 0, touch: false, delta: 0 }, frame, 'Idle', 0);
     draw();
+    window.shakeProbe = async () => {
+      simulation = new Simulation();
+      simulation.branch(); while (simulation.transition) simulation.step();
+      world.resize(3);
+      const offset = (reducedMotion = false): number => {
+        world.draw(simulation, { started: true, reducedMotion, best: 0, touch: false, delta: 0, effectDelta: STEP }, frame, 'Idle', 0);
+        const base = Math.round(world.camera.originX * 3) + world.sourceLeft * world.presentation.scaleX;
+        return (world.presentation.x - base) / world.presentation.scaleX;
+      };
+      const before = offset();
+      simulation.merge();
+      const steps = Math.ceil(simulation.transitionDuration / STEP);
+      for (let n = 0; n < steps - 1; n++) simulation.step();
+      const midair = offset();
+      simulation.step(); const landed = offset();
+      simulation.step(); const pulse = offset(), motion = world.motion.draws;
+      simulation.setPaused(true); simulation.step(); const paused = offset(), reduced = offset(true);
+      simulation.setPaused(false);
+      for (let n = 0; n < 31; n++) simulation.step();
+      const expired = offset(), time = simulation.time;
+      simulation = new Simulation(); const restarted = offset();
+      await new Promise<void>(resolve => this.game.events.once('postrender', resolve));
+      return { before, midair, landed, pulse, paused, reduced, expired, restarted, motion, time };
+    };
     window.muzzleProbe = async kind => {
       simulation = new Simulation(123);
       simulation.config.branches.liftDuration = .8; simulation.config.branches.collapseDuration = .2;
@@ -125,7 +150,7 @@ class Probe extends Phaser.Scene {
         converted: simulation.isConverted(0, '0:0'),
       };
     };
-    window.tweenProbe = async (kind, steps, nested, zoom) => {
+    window.tweenProbe = async (kind, progress, nested, zoom) => {
       simulation = new Simulation(123);
       simulation.player.x = 104;
       if (nested) {
@@ -139,6 +164,7 @@ class Probe extends Phaser.Scene {
         simulation.merge();
       }
       const branch = simulation.top;
+      const steps = Math.floor(progress * simulation.transitionDuration / STEP);
       for (let n = 0; n < steps; n++) simulation.step();
       simulation.paused = true;
       draw();

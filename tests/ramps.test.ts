@@ -13,17 +13,18 @@ describe('one-unit collidable fork surfaces', () => {
     game.branch();
     if (kind === 'merge') { settle(game); game.merge(); }
     const forkX = game.top.forkX;
+    const steps = Math.ceil(game.transitionDuration / STEP);
     const samples = [];
-    for (let step = 1; step <= 20; step++) {
+    for (let step = 1; step < steps; step++) {
       game.step({ ...input(0), jump: step === 1 });
       const t = step * STEP / game.transitionDuration;
-      const lift = kind === 'branch' ? 1 - (1 - t) ** 3 : 1 - t ** 3;
+      const lift = kind === 'branch' ? 1 - (1 - t) ** game.config.branches.liftEase : 1 - t ** game.config.branches.collapseEase;
       expect(game.surfaceAt(2, 160).height).toBeCloseTo(LANE + LANE * lift);
       expect(game.surfaceAt(2, forkX).height).toBe(LANE);
       expect(game.surfaceAt(2, forkX + UNIT / 2).height).toBeCloseTo(LANE + LANE / 2 * lift);
       expect(game.surfaceAt(1, forkX + UNIT / 2).height).toBe(LANE);
       expect(game.playerWorldY).toBeCloseTo(game.surfaceAt(2, 160).height + game.player.y);
-      if ([5, 10, 15].includes(step)) samples.push(game.surfaceAt(2, 160).height);
+      if ([1, Math.floor(steps / 2), steps - 1].includes(step)) samples.push(game.surfaceAt(2, 160).height);
     }
     expect(new Set(samples).size).toBe(3);
     expect(game.depth).toBe(2);
@@ -64,6 +65,8 @@ describe('one-unit collidable fork surfaces', () => {
   });
   it.each([-1, 1])('jumps and lands on the slope while moving %i', direction => {
     const game = new Simulation();
+    // Keep uphill surface rise below the jump's vertical speed.
+    game.config.character.speed = 90;
     game.branch(); settle(game);
     game.player.x = game.top.forkX + UNIT / 2;
     game.step(input(direction, true));

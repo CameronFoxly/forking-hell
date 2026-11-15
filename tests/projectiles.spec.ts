@@ -24,6 +24,9 @@ test('keyboard-driven nested lift, rewind, merge and recross never emit from a c
   });
   await page.goto('/'); await page.locator('#tuning-toggle').click();
   const config = structuredClone(DEFAULTS);
+  // Keep firing-event crossings aligned with this reproduction's scripted positions.
+  config.character.speed = 90;
+  config.enemies.firingRate = 1; config.enemies.shotSpeed = 86;
   config.branches.liftDuration = .8; config.branches.collapseDuration = .2;
   await page.locator('#tuning-file').setInputFiles({ name: 'projectiles.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(tuningDocument(config))) });
   await page.locator('#tuning-apply').click(); await page.locator('#tuning-close').click(); await page.locator('#game').focus();
@@ -33,7 +36,10 @@ test('keyboard-driven nested lift, rewind, merge and recross never emit from a c
   }
   await page.keyboard.down('KeyD');
   await page.waitForFunction(() => window.forkingHell.snapshot().x >= 445);
+  await page.keyboard.up('KeyD');
   await page.keyboard.press('KeyW');
+  await page.waitForFunction(() => window.forkingHell.snapshot().depth === 3);
+  await page.keyboard.down('KeyD');
   await page.waitForFunction(() => window.forkingHell.snapshot().x >= 500);
   await page.keyboard.up('KeyD');
   const emitted = await page.evaluate(() => window.forkingHell.projectiles());

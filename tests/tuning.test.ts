@@ -26,6 +26,7 @@ describe('complete versioned tuning', () => {
     expect(needsRestart(DEFAULTS, config)).toBe(true);
   });
   it('rejects incomplete, extra, incompatible, nonfinite and cross-field-invalid data', () => {
+    const before = structuredClone(DEFAULTS);
     const invalid = [
       { ...tuningDocument(DEFAULTS), version: 99 },
       { ...tuningDocument(DEFAULTS), extra: true },
@@ -38,7 +39,7 @@ describe('complete versioned tuning', () => {
       tuningDocument({ ...DEFAULTS, enemies: { ...DEFAULTS.enemies, spinnerHeight: 10, spinnerBob: 20 } }),
     ];
     for (const document of invalid) expect(() => parseTuning(document)).toThrow();
-    expect(DEFAULTS.character.speed).toBe(90);
+    expect(DEFAULTS).toEqual(before);
   });
   it('applies movement, physics, enemy and camera values without tying time to frame count', () => {
     const config = structuredClone(DEFAULTS);
@@ -52,7 +53,7 @@ describe('complete versioned tuning', () => {
     const patrol = encounters(123, 0)[0]!;
     expect(hazardPose(patrol, .2, { ...config.enemies, patrolSpeed: 2 })).toEqual(hazardPose(patrol, .4, config.enemies));
     const shooter = encounters(123, 1, { ...config.enemies, firingRate: 2 })[0]!;
-    expect(shooter.period).toBe(encounters(123, 1)[0]!.period / 2);
+    expect(shooter.period).toBe(encounters(123, 1, { ...config.enemies, firingRate: 1 })[0]!.period / 2);
     config.camera.startZoom = 1;
     const camera = new CameraRig(); camera.reset(config.camera);
     expect(camera.zoom).toBe(1);

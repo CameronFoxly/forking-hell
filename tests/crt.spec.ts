@@ -47,7 +47,7 @@ test('CRT and motion remain independently tunable and pause clears motion', asyn
   await expect.poll(() => page.evaluate(() => window.forkingHell.diagnostics().motionDraws)).toBe(0);
 });
 
-test('every CRT amount produces distinct low, default and high shader output in gameplay and intro', async ({ page, isMobile }) => {
+test('every CRT amount produces distinct low, intermediate and high shader output in gameplay and intro', async ({ page, isMobile }) => {
   test.skip(Boolean(process.env.PREVIEW_URL), 'Test-only deterministic fixture is not distributed.');
   await page.goto('/tests/render-fixture.html');
   await page.waitForFunction(() => Boolean(window.effectProbe));
@@ -62,7 +62,9 @@ test('every CRT amount produces distinct low, default and high shader output in 
   ];
   for (const started of [true, false]) for (const [key, overrides] of cases) {
     const config = { ...DEFAULTS.crt, opticalEnabled: 0, scanlinesEnabled: 0, glowEnabled: 0, curvatureEnabled: 0, hudStrength: 1, ...overrides };
-    const values = [FIELDS.crt[key].min, DEFAULTS.crt[key], FIELDS.crt[key].max];
+    const { min, max } = FIELDS.crt[key];
+    const middle = DEFAULTS.crt[key] > min && DEFAULTS.crt[key] < max ? DEFAULTS.crt[key] : (min + max) / 2;
+    const values = [min, middle, max];
     const images = [];
     for (const value of values) images.push(await page.evaluate(
       ({ config, key, value, started, mobile }) => window.effectProbe(true, { ...config, [key]: value }, started, mobile),

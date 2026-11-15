@@ -16,9 +16,9 @@ describe('cosmetic motion without camera coupling', () => {
     const tracker = new MotionTracker();
     sample(tracker, 0, 0, { ...frame, poseTime: 0 });
     const moving = sample(tracker, 0, 2, { ...frame, poseTime: 1 / 60 });
-    expect(moving.y).toBe(1);
+    expect(moving.y).toBe(2);
     expect(sample(tracker, 0, 2, { ...frame, seconds: 1 / 120, poseTime: 1 / 60 })).toEqual(moving);
-    expect(sample(tracker, 0, 0, { ...frame, poseTime: 2 / 60 }).y).toBe(-1);
+    expect(sample(tracker, 0, 0, { ...frame, poseTime: 2 / 60 }).y).toBe(-2);
     expect(sample(tracker, 0, 0, { ...frame, zoom: .87, poseTime: 3 / 60 }).alpha).toBe(0);
   });
   it('bounds CSS/world fringes and clears pause, gaps, viewport changes and teleports', () => {
@@ -52,7 +52,7 @@ describe('cosmetic motion without camera coupling', () => {
       connectorFringe(sink, 1, { ax: 0, ay: 0, bx: 24, by: step * 2, color: 0xffffff });
       tracker.end();
     }
-    expect(values[0]!.alpha).toBe(0); expect(values[1]!.alpha).toBe(0); expect(values[2]!.y).toBe(1);
+    expect(values[0]!.alpha).toBe(0); expect(values[1]!.alpha).toBe(0); expect(values[2]!.y).toBe(2);
   });
 });
 describe('static monitor treatment', () => {
@@ -60,12 +60,16 @@ describe('static monitor treatment', () => {
   it('retains CSS-space optics and integer scanline periods at multiple densities', () => {
     const a = monitorUniforms(DEFAULTS.crt, view);
     const b = monitorUniforms(DEFAULTS.crt, { ...view, width: 2880, height: 1620 });
-    expect(a.optical).toBe(b.optical); expect(a.scanPeriod / 2).toBe(b.scanPeriod / 3);
+    expect(a.optical).toBe(b.optical);
+    for (const [period, density] of [[a.scanPeriod, 2], [b.scanPeriod, 3]]) {
+      expect(Number.isInteger(period)).toBe(true);
+      expect(Math.abs(period! - DEFAULTS.crt.scanlinePeriod * density!)).toBeLessThanOrEqual(.5);
+    }
     expect(monitorUniforms(DEFAULTS.crt, { ...view, mobile: true }).optical).toBe(DEFAULTS.crt.opticalMobile);
     expect(() => monitorUniforms(DEFAULTS.crt, { ...view, cssWidth: 0 })).toThrow();
   });
   it('honors separate disable and reduced-effects paths', () => {
-    const reduced = monitorUniforms(DEFAULTS.crt, { ...view, reducedMotion: true });
+    const reduced = monitorUniforms({ ...DEFAULTS.crt, scanlinesEnabled: 1 }, { ...view, reducedMotion: true });
     expect(reduced.curvature).toBe(0); expect(reduced.glow).toBeLessThanOrEqual(.08);
     expect(reduced.scanline).toBe(DEFAULTS.crt.scanlineStrength / 2);
     expect(monitorUniforms({ ...DEFAULTS.crt, enabled: 0 }, view).active).toBe(false);
@@ -73,7 +77,7 @@ describe('static monitor treatment', () => {
   });
   it('passes strong normal settings through unchanged, including beyond the former hidden glow caps', () => {
     const crt = {
-      ...DEFAULTS.crt, opticalDesktop: 18, opticalMobile: 12, scanlineStrength: .85, scanlinePeriod: 24,
+      ...DEFAULTS.crt, opticalDesktop: 18, opticalMobile: 12, scanlinesEnabled: 1, scanlineStrength: .85, scanlinePeriod: 24,
       glowStrength: 2, glowRadius: 16, glowThreshold: 0, curvature: .25, hudStrength: 1,
     };
     expect(parseTuning(tuningDocument({ ...DEFAULTS, crt })).crt).toEqual(crt);

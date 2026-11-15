@@ -44,7 +44,7 @@ Pause-menu preferences and your personal best are saved in local browser storage
 
 Open **Tune** in the top bar and expand a section to adjust sliders, numeric values or toggles. Character animation, physics, camera, effects, coin physics, CRT/motion and merge audio apply live. Changes under **Enemies & projectiles** or **Forks & held merge** require **Apply & start new run**, which replaces the current run. While those changes are pending, the whole draft waits together, including further edits to live settings.
 
-**Lift duration** and **Collapse duration** are independent, with separate easing controls. **Full-held jump height** is the maximum (initially 38 pixels); the shortest tap is half that. CRT monitor optics and motion-driven channel splitting can be adjusted or disabled independently. See [Tuning](docs/TUNING.md) for the full contract.
+**Lift duration** and **Collapse duration** are independent, with separate easing controls. **Full-held jump height** is the maximum (initially 56 pixels); the shortest tap is half that. Completed merge landings give one brief camera-shake pulse, using the shared **Impact shake** controls; reduced effects disables it. CRT monitor optics and motion-driven channel splitting can be adjusted or disabled independently. See [Tuning](docs/TUNING.md) for the full contract.
 
 Held merges wait for each collapse animation, then any **Extra delay after merge tween** (`branches.holdDelay`). Its default is **0 seconds**, so there is no additional repeat delay.
 

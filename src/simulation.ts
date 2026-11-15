@@ -4,14 +4,14 @@ import type { Tuning } from './tuning';
 export const STEP = 1 / 60;
 export const UNIT = 24;
 export const LANE = 58;
-export const SPEED = 90;
-export const GRAVITY = 850;
-export const JUMP_HEIGHT = 38;
+export const SPEED = DEFAULTS.character.speed;
+export const GRAVITY = DEFAULTS.physics.gravity;
+export const JUMP_HEIGHT = DEFAULTS.physics.jumpHeight;
 export const PLAYER_WIDTH = 26;
 export const PLAYER_HEIGHT = 27;
 export const CHUNK = 480;
 export const SHOT_LIFE = 2.8;
-export const SHOT_SPEED = 86;
+export const SHOT_SPEED = DEFAULTS.enemies.shotSpeed;
 export const ATTACK_RANGE = SHOT_LIFE * SHOT_SPEED + 30;
 
 export type HazardKind = 'patrol' | 'spinner' | 'shooter' | 'gate';
@@ -152,6 +152,7 @@ export class Simulation {
   private comboFlourished = false;
   private mergeBlocked = false;
   private jumpFlight: { height: number; age: number; rise: number; holdWindow: number; released: boolean } | null = null;
+  private shakeAt = -Infinity;
 
   constructor(seed = 0xf04c, public config: Tuning = structuredClone(DEFAULTS)) {
     this.seed = seed;
@@ -163,6 +164,7 @@ export class Simulation {
   get attackRange(): number { return this.config.enemies.shotLife * this.config.enemies.shotSpeed + 30; }
   get lane(): number { return this.config.branches.height; }
   get unit(): number { return this.config.branches.length; }
+  get shakeAge(): number { return this.realTime - this.shakeAt; }
   get transitionDuration(): number { return this.transition?.kind === 'merge' ? this.config.branches.collapseDuration : this.config.branches.liftDuration; }
   pose(hazard: Encounter, time = this.time): ReturnType<typeof hazardPose> { return hazardPose(hazard, time, this.config.enemies); }
   shotPose(shot: Shot): ReturnType<typeof shotPosition> { return shot.retired ? null : shotPosition(shot, this.time, this.config.enemies.shotLife); }
@@ -330,6 +332,7 @@ export class Simulation {
     this.branchShots.delete(child.id);
     this.branches.pop();
     this.tutorial.merged = true;
+    this.shakeAt = this.realTime;
     this.events.push('merge');
   }
 
@@ -445,6 +448,7 @@ export class Simulation {
     if (this.player.invulnerable > 0) return;
     this.player.health--;
     this.player.invulnerable = this.config.physics.hitProtection;
+    this.shakeAt = this.realTime;
     this.bursts.push({ x: this.player.x, branchId: this.branches[this.currentDepth]!.id, age: 0, kind: 'hit' });
     this.events.push('hit');
     if (this.player.health <= 0) {
