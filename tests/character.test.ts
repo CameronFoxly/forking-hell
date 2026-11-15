@@ -29,6 +29,8 @@ describe('sprite-tester character contract', () => {
     animation.update(0.1, false, 200, 1);
     expect([animation.clip, animation.index]).toEqual(['Jump_Up', 0]);
     animation.afterDraw();
+    expect(animation.index).toBe(0);
+    animation.update(0, false, 200, 1);
     expect(animation.index).toBe(1);
     for (const expected of [2, 3, 2, 3]) {
       animation.update(DEFAULTS.character.jumpMs / 1000, false, 100, 1);
@@ -78,5 +80,18 @@ describe('sprite-tester character contract', () => {
     expect(game.events.filter(e => e === 'land')).toHaveLength(1);
     expect(game.player.grounded).toBe(true);
     expect(game.time).toBe(0);
+  });
+
+  it('holds the last drawn launch pose while paused and restarts a second jump before any pending frame advance', () => {
+    const animation = new CharacterAnimation(atlas);
+    animation.jumped(); animation.update(.05, false, 100, 0); animation.afterDraw();
+    const paused = animation.frame;
+    expect(paused).toBe(atlas.Jump_Up[0]);
+    expect(animation.frame).toBe(paused);
+    animation.jumped(); animation.update(.05, false, 100, 0);
+    expect(animation.frame).toBe(atlas.Jump_Up[0]);
+    animation.afterDraw();
+    animation.update(.01, false, 100, 0);
+    expect(animation.frame).toBe(atlas.Jump_Up[1]);
   });
 });

@@ -1,6 +1,22 @@
 # Validation
 
-## Latest source defaults and merge landing shake
+## Current source: double jump, black letterboxing and top switches
+
+**92 unit tests, strict TypeScript/build and 55 targeted browser checks passed**, with nine intended CDP-only skips in the 64-case browser run. The browser run covered `jump`, `letterbox`, `projectiles`, `tuning`, `render` and `tween-render` across Chromium, Firefox, WebKit and DPR3 Chromium touch emulation. This is not a claim that every browser suite was rerun or that physical phone hardware was tested.
+
+Double-jump checks cover fresh release/press, held input, no third jump, rising/falling second launches, physical-landing reset, and no reset from a branch/merge alone. Measured per-launch tap/full heights retain the 2:1 envelope across default and extreme gravity/height pairs. Native touch plus keyboard ownership, same-tick edges, live zero controls and pause are covered. Acceptance caught a launch pose advancing once after pause; moving that pending advance to the next unpaused animation update preserves both the drawn pose and second-jump restart.
+
+Particle checks cover absolute emission origins, survival after support removal, forward-only lifetime, pause/reversal, independent zero settings, reduced effects and the 128-particle bound. A separate real-control desktop/mobile pass observed second jumps above 81 world pixels with active burst/trail particles while environmental time stayed zero. The silent H.264 recording `jump-review/double-jump-gameplay.mp4` is 9.03 seconds at 1280x800 and 30 fps.
+
+All existing values match the complete `(5)` attachment exactly. Only the three new particle groups and schema version 3 were added. Strict v1/v2 migration, fresh initialization, Reset and an actual downloaded v3 export were verified; no active user tuning page was manually reset. Session evidence includes `jump-review/evidence.json`, `defaults-export.json` and the desktop/mobile screenshots.
+
+Real screenshot samples outside the canvas are opaque `[0, 0, 0, 255]` at desktop/wide and mobile portrait/landscape sizes, including Tune-open layouts. The canvas retains near-black-purple ink and its exact source-ink mapping; native-grid and final-display integrity checks remain unchanged. Aspect ratio, sizing and control layout are unchanged.
+
+Top-shooter cases cover ordinary-height staging, absent top bodies/emissions, active lower counterparts, nested forks, every merge level, rewind and stable source ownership. Rendered projectile samples match the actual lower muzzles, and the control-driven three-fork capture shows three living lower shooters and one switch-only top copy. Already-airborne flight survives conversion, top-only status or branch removal until the next birth/expiry boundary. Converted/removed sources never replay; a temporarily hidden living source can emit again only after becoming lower and crossing a genuine firing event.
+
+These changes are local source/build work. The public deployment and existing ZIP remain unchanged.
+
+## Previous source defaults and merge landing shake: `641ee16`
 
 The complete `forking-hell-tuning-v2 (5).json` preset supplies fresh-load and Reset defaults, superseding the earlier `(3)` file. Source JSON, strict parsing, fresh browser initialization, Reset after restart-required edits, and an actual downloaded export all match every supplied value. Scanlines remain disabled with depth 0.16 and spacing 4.75 retained; HUD/splash strength remains 1.
 

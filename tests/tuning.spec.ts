@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
-import { DEFAULTS, tuningDocument } from '../src/tuning';
+import { DEFAULTS, JUMP_EFFECT_SECTIONS, tuningDocument } from '../src/tuning';
 
 async function start(page: Page): Promise<void> {
   await page.goto('/'); await page.locator('#start').click();
@@ -79,6 +79,7 @@ test('legacy timing import announces migration and preserves both durations', as
   await start(page); await page.locator('#tuning-toggle').click();
   const values: Record<string, unknown> = structuredClone(DEFAULTS);
   delete values.coins; delete values.crt; delete values.motion;
+  for (const section of JUMP_EFFECT_SECTIONS) delete values[section];
   values.branches = { length: 24, height: 58, transition: .8, holdDelay: 0 };
   await page.locator('#tuning-file').setInputFiles({
     name: 'legacy.json', mimeType: 'application/json',
@@ -90,6 +91,22 @@ test('legacy timing import announces migration and preserves both durations', as
   expect((await current(page)).branches.collapseDuration).toBe(.8);
   expect((await current(page)).crt.enabled).toBe(0);
   expect((await current(page)).motion.enabled).toBe(0);
+});
+
+test('complete v2 import preserves existing values, announces new effects, and Reset restores all groups', async ({ page }) => {
+  await start(page); await page.locator('#tuning-toggle').click();
+  const values: Record<string, unknown> = structuredClone(DEFAULTS);
+  for (const section of JUMP_EFFECT_SECTIONS) delete values[section];
+  values.character = { ...DEFAULTS.character, speed: DEFAULTS.character.speed + 1 };
+  await page.locator('#tuning-file').setInputFiles({
+    name: 'v2.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ format: 'forking-hell-tuning', version: 2, values })),
+  });
+  await expect(page.locator('#tuning-status')).toContainText('Migrated version 2');
+  expect(await current(page)).toEqual({ ...DEFAULTS, ...values });
+  await expect(page.locator('#tuning-apply')).toBeHidden();
+  await page.locator('#tuning-reset').click();
+  expect(await current(page)).toEqual(DEFAULTS);
 });
 
 test('native touch tap and hold measure half/full jump height and cancel releases ownership', async ({ page, context }, info) => {

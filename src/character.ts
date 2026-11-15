@@ -49,15 +49,17 @@ export class CharacterAnimation {
   index = 0;
   private elapsed = 0;
   private firstDraw = false;
+  private launchAdvance = false;
   private landing: number | null = null;
 
   constructor(readonly atlas: CharacterAtlas, public settings: Tuning['character'] = DEFAULTS.character) {}
   get frame(): CharacterFrame { return this.atlas[this.clip][this.index]!; }
-  reset(): void { this.clip = 'Idle'; this.index = 0; this.elapsed = 0; this.firstDraw = false; this.landing = null; }
+  reset(): void { this.clip = 'Idle'; this.index = 0; this.elapsed = 0; this.firstDraw = false; this.launchAdvance = false; this.landing = null; }
   jumped(): void { this.enter('Jump_Up', true); this.firstDraw = true; this.landing = null; }
   landed(): void { this.enter('Land', true); this.firstDraw = true; this.landing = this.settings.landMs; }
 
   update(seconds: number, grounded: boolean, velocityYUp: number, axis: number): void {
+    if (this.launchAdvance) { this.launchAdvance = false; this.index = 1; this.elapsed = 0; }
     const dt = Math.max(0, Math.min(0.1, seconds)) * 1000;
     if (this.landing !== null) {
       if (this.firstDraw) return;
@@ -77,12 +79,12 @@ export class CharacterAnimation {
   afterDraw(): void {
     if (!this.firstDraw) return;
     this.firstDraw = false;
-    if (this.clip === 'Jump_Up') { this.index = 1; this.elapsed = 0; }
+    this.launchAdvance = this.clip === 'Jump_Up';
   }
 
   private enter(clip: Clip, restart = false): boolean {
     if (clip === this.clip && !restart) return false;
-    this.clip = clip; this.index = 0; this.elapsed = 0;
+    this.clip = clip; this.index = 0; this.elapsed = 0; this.launchAdvance = false;
     return true;
   }
   private advance(dt: number, loop: number): void {

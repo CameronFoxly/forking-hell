@@ -1,6 +1,6 @@
 {
   "format": "forking-hell-tuning",
-  "version": 2,
+  "version": 3,
   "values": {
     "character": { "speed": 121, "idleMs": 240, "walkMs": 50, "jumpMs": 50, "landMs": 60 },
     "physics": { "gravity": 680, "jumpHeight": 56, "hitProtection": 1.35 },
@@ -8,6 +8,9 @@
     "branches": { "length": 24, "height": 58, "liftDuration": 0.34, "collapseDuration": 0.2, "liftEase": 3, "collapseEase": 4.7, "holdDelay": 0 },
     "camera": { "startZoom": 0.88, "minZoom": 0.48, "depthZoom": 0.42, "deadzone": 0.13, "lookAhead": 0.2, "lookDamping": 5, "followDamping": 9, "verticalDamping": 8, "zoomDamping": 6 },
     "effects": { "particles": 9, "particleLife": 0.65, "particleSpread": 1, "shakeAmount": 2, "shakeDuration": 0.2, "shakeFrequency": 120, "paletteStrength": 1, "inactiveOpacity": 0.7, "highlightStrength": 0.65 },
+    "jumpBurst": { "count": 6, "size": 2, "life": 0.28, "spread": 8, "speed": 26 },
+    "doubleJumpBurst": { "count": 10, "size": 2, "life": 0.36, "spread": 12, "speed": 34 },
+    "jumpTrail": { "rate": 18, "size": 1, "life": 0.28, "spread": 2, "speed": 8 },
     "crt": { "enabled": 1, "opticalEnabled": 1, "opticalDesktop": 2, "opticalMobile": 1.25, "scanlinesEnabled": 0, "scanlineStrength": 0.16, "scanlinePeriod": 4.75, "glowEnabled": 1, "glowStrength": 0.65, "glowRadius": 2.25, "glowThreshold": 0.9, "curvatureEnabled": 1, "curvature": 0.02, "hudStrength": 1 },
     "motion": { "enabled": 1, "strength": 0.09, "exposureMs": 35, "maxWorldPixels": 3, "maxDesktopCss": 5, "maxMobileCss": 2 },
     "coins": { "popSpeed": 159, "spread": 48, "gravity": 640, "bounce": 0.42, "friction": 0.78, "shimmer": 0.65 },

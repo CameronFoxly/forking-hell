@@ -4,17 +4,19 @@ Open **Tune**, expand a section, then adjust its labeled number, slider or check
 
 If the viewport is too small to start a run, Apply rejects before changing the effective configuration or run. The draft and Apply button remain, with an explanation. Enlarge the viewport and apply again. Safe edits with no pending restart changes still work while paused or undersized.
 
-**Export JSON** saves every effective value to `forking-hell-tuning-v2.json`, not the draft or UI expansion state. **Import JSON** accepts the same complete document and uses the same live/restart rules. **Reset defaults** also follows those rules. Tuning is tab-local: export before reload. Share the exported file to propose source defaults; after review it can replace `src/defaults.json` directly.
+**Export JSON** saves every effective value to `forking-hell-tuning-v3.json`, not the draft or UI expansion state. **Import JSON** accepts the same complete document and uses the same live/restart rules. **Reset defaults** also follows those rules. Tuning is tab-local: export before reload. Share the exported file to propose source defaults; after review it can replace `src/defaults.json` directly.
 
-The root is `{"format":"forking-hell-tuning","version":2,"values":{...}}`. Every current section and field is required, including `coins`, `crt` and `motion`. Numeric toggles must be exactly 0 or 1. Validation rejects unknown/missing keys, unsupported versions, strings in numeric fields, non-finite or out-of-range numbers, non-integer counts/geometry, minimum zoom above start zoom, and spinner bob larger than its height. Files above 64 KiB are rejected. Parsing completes before application; a failed or superseded import never partially changes the run.
+The root is `{"format":"forking-hell-tuning","version":3,"values":{...}}`. Every current section and field is required, including `jumpBurst`, `doubleJumpBurst` and `jumpTrail`. Numeric toggles must be exactly 0 or 1. Validation rejects unknown/missing keys, unsupported versions, strings in numeric fields, non-finite or out-of-range numbers, non-integer counts/geometry, minimum zoom above start zoom, and spinner bob larger than its height. Files above 64 KiB are rejected. Parsing completes before application; a failed or superseded import never partially changes the run.
 
-Complete historical v1 documents are migrated explicitly: the old branch shape has `length`, `height`, `transition`, `holdDelay`, optionally both `liftEase` and `collapseEase`. The shared `transition` becomes equal lift/collapse durations; omitted easing gets shipped defaults. New coin settings use shipped defaults, while CRT and motion are disabled for legacy imports. The panel announces migration. Partial/mixed historical shapes and unpublished partial v2 documents are rejected rather than guessed.
+Complete v2 documents retain every supplied value and gain only the three new jump-effect sections. Historical v1 documents migrate explicitly: the old branch shape has `length`, `height`, `transition`, `holdDelay`, optionally both easing powers. Shared timing becomes equal lift/collapse durations; missing easing remains 3/3. Coin and jump effects use defaults, while CRT and motion are disabled. The panel announces either migration. Partial or mixed historical/current shapes are rejected rather than guessed.
 
 ## Timing and feedback
 
 `branches.liftDuration` and `branches.collapseDuration` are independent authoritative durations, initially 0.34 and 0.2 seconds (21 and 12 fixed simulation steps). `liftEase` and `collapseEase` are easing powers, initially 3 and 4.7: 1 is linear, 3 is cubic. Geometry, support, colliders and attached objects share those surfaces. Held-merge scheduling follows collapse completion, never lift duration.
 
-`physics.jumpHeight` is the **full-held maximum**, initially 56 world pixels. A minimum tap reaches half that height; intermediate holds fill the range. Changing height or gravity preserves the 2:1 launch contract, with fixed-step apex sampling tolerance. Holding after landing does not jump again.
+`physics.jumpHeight` is the **full-held maximum per launch**, initially 56 world pixels. A minimum tap reaches half that height; intermediate holds fill the range. One fresh release/press in the air resets upward velocity for a second launch, rising or falling. Only physical landing restores that air jump. Both launches preserve the 2:1 envelope as height/gravity change. Holding never repeats a jump, including after landing.
+
+**First-jump poof** (`jumpBurst`) and **Double-jump poof** (`doubleJumpBurst`) separately expose count (0-24), whole-world-pixel size (0-4), lifetime (0.05-1 second), emission spread (0-30 world pixels) and launch speed (0-100 pixels/second). **Jump trail** separately exposes density (0-60 particles/second), size, lifetime, spread (0-20) and downward drift (0-60 pixels/second). Count, density or size zero turns that system off immediately. The defaults are a six-particle first poof, ten-particle second poof, and sparse 18/second one-pixel trail. Emission captures the player's actual world position; particles finish independently of supports, reverse time or removed branches. Pause freezes them, reduced effects suppresses them, and a 128-particle cap drops oldest cosmetic particles at extreme settings. Existing particles retain their emission lifetime/motion settings until expiry.
 
 `coins.popSpeed` and `spread` control seeded launch velocity. `gravity`, `bounce` (restitution), `friction` (horizontal velocity retained at surface impacts), and `shimmer` control forward-clock drops. Explicit pause freezes motion. Coins bounce on the shared moving support and against nearby coins; distant drops sleep without changing rewards.
 
@@ -26,7 +28,7 @@ Complete historical v1 documents are migrated explicitly: the old branch shape h
 
 ## CRT ranges and effective state
 
-Defaults and the complete v2 document shape are unchanged; existing v2 presets still import. Normal-mode monitor controls now span deliberately strong settings:
+Existing CRT values remain unchanged when v2 presets migrate. Normal-mode monitor controls span deliberately strong settings:
 
 | Control | Range |
 | --- | --- |
@@ -49,4 +51,4 @@ World rendering is `WorldRenderer.composition` (native texels, internal common p
 
 CRT optics, scanlines, glow and curvature have independent controls under `crt`. `motion` independently controls world-texel channel splitting, exposure and world/CSS caps. Motion receives actual eased poses and stable platform/connector anchors, not camera displacement. Its monotonic `poseTime` preserves fringes across repeated display frames between simulation ticks. Pause, resize, restart, reduced effects and graphics loss reset motion. Reduced effects suppress curvature/motion and attenuate glow/scanlines; monitor controls remain independent. CRT bypasses oversized buffers with a notice rather than downsampling. These are bounded cosmetic effects, not a velocity buffer or rotational-motion reconstruction.
 
-Do not place monitor optics before the native world raster or reintroduce a fixed post-zoom downsample. The shared background is near-black `#08060f`; the palette filter explicitly aliases original `#14102b` sprite ink to this entry before nearest-color matching, leaving foreground palette entries unchanged.
+Do not place monitor optics before the native world raster or reintroduce a fixed post-zoom downsample. The in-canvas background remains near-black `#08060f`; the palette filter explicitly aliases original `#14102b` sprite ink to this entry before nearest-color matching. Outer page/letterbox/panel surfaces are pure `#000000`; foreground palette entries and in-canvas overlays are unchanged.

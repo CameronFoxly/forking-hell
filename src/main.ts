@@ -208,6 +208,7 @@ class GameScene extends Phaser.Scene {
         coins: simulation.coinScore, started, gameOver: simulation.gameOver,
         transition: simulation.transition?.kind ?? null, animation: this.world.animation,
         mergeCombo: simulation.mergeCombo,
+        airJumpAvailable: simulation.airJumpAvailable,
       }),
       diagnostics: () => ({
         engine: Phaser.VERSION, shaderPasses: this.palette.runs, logical: [WIDTH, HEIGHT],
@@ -220,6 +221,7 @@ class GameScene extends Phaser.Scene {
         outputResolution: [canvas.width, canvas.height], worldPixelPitch: this.world.camera.zoom * this.presentation.scale,
         crtActive: this.crt.active, crtUniforms: this.crt.uniforms, crtBudgetBlocked: this.crt.budgetBlocked, reducedMotion,
         motionDraws: this.world.motion.draws,
+        jumpParticles: simulation.jumpParticles.length,
         visibleShots: this.world.renderedShots, retainedShots: simulation.shots.size,
         retainedCoins: simulation.coins.size, activeBranches: simulation.branches.length,
         averageFrameMs: this.frameTimes.reduce((sum, n) => sum + n, 0) / Math.max(1, this.frameTimes.length),
@@ -230,6 +232,7 @@ class GameScene extends Phaser.Scene {
           .filter(hazard => hazard.kind === 'shooter').flatMap(hazard => simulation.branches.map((branch, depth) => ({
             id: `${branch.id}/${hazard.id}`, branchId: branch.id, sourceId: hazard.id,
             muzzle: simulation.shooterMuzzle(depth, hazard), converted: simulation.isConverted(depth, hazard.id),
+            active: simulation.isOrdinaryActive(depth, hazard),
           }))),
         shots: [...simulation.shotsNear(simulation.player.x - 350, simulation.player.x + 350, simulation.playerWorldY - 300, simulation.playerWorldY + 300)]
           .flatMap(shot => { const pose = simulation.shotPose(shot); return pose ? [{ ...shot, pose }] : []; }),
@@ -245,7 +248,7 @@ class GameScene extends Phaser.Scene {
       this.accumulator += Math.min(delta / 1000, 0.1);
       while (this.accumulator >= STEP) {
         const firstEvent = simulation.events.length;
-        simulation.step(controls.sample());
+        simulation.step(controls.sample(), STEP, reducedMotion);
         for (const event of simulation.events.slice(firstEvent)) {
           if (event === 'jump') character.jumped();
           if (event === 'land') character.landed();

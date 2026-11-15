@@ -123,7 +123,7 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
   document.getElementById('tuning-export')!.addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(tuningDocument(read()), null, 2) + '\n'], { type: 'application/json' });
     const url = URL.createObjectURL(blob), link = document.createElement('a');
-    link.href = url; link.download = 'forking-hell-tuning-v2.json'; link.click();
+    link.href = url; link.download = 'forking-hell-tuning-v3.json'; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     report('Exported complete effective settings. Unapplied edits are not included.');
   });
@@ -139,7 +139,8 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
       const parsed = parseTuning(document);
       if (request === fileRequest) {
         accept(parsed);
-        if (document.version === 1) report(`Migrated version 1: shared timing became equal lift/collapse durations; CRT and motion are off. ${commit.hidden ? 'Applied live.' : 'Apply the pending new run.'}`);
+        if (document.version === 1) report(`Migrated version 1: shared timing became equal lift/collapse durations; CRT and motion are off; jump effects use defaults. ${commit.hidden ? 'Applied live.' : 'Apply the pending new run.'}`);
+        else if (document.version === 2) report(`Migrated version 2: added first-jump, double-jump and trail defaults; existing values are unchanged. ${commit.hidden ? 'Applied live.' : 'Apply the pending new run.'}`);
       }
     } catch (error) {
       if (request === fileRequest) report(error instanceof Error ? error.message : 'Could not read tuning JSON.', true);

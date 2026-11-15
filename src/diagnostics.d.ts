@@ -7,7 +7,7 @@ declare global {
         x: number; y: number; time: number; depth: number; health: number; score: number;
         paused: boolean; staged: string[]; converted: number; coins: number; started: boolean; gameOver: boolean;
         transition: 'branch' | 'merge' | null; animation: { clip: string; index: number; facing: number };
-        mergeCombo: number;
+        mergeCombo: number; airJumpAvailable: boolean;
       };
       diagnostics(): {
         engine: string; shaderPasses: number; logical: number[]; physicalPixelScale: number; dpr: number;
@@ -18,12 +18,12 @@ declare global {
         worldTarget: number[]; filterResolution: number[]; outputResolution: number[]; worldPixelPitch: number;
         crtActive: boolean; crtBudgetBlocked: boolean; reducedMotion: boolean;
         crtUniforms: ReturnType<typeof import('./crt-math').monitorUniforms> | null;
-        motionDraws: number;
+        motionDraws: number; jumpParticles: number;
         retainedCoins: number; activeBranches: number; averageFrameMs: number;
       };
       projectiles(): {
         time: number;
-        sources: { id: string; branchId: number; sourceId: string; muzzle: { x: number; y: number }; converted: boolean }[];
+        sources: { id: string; branchId: number; sourceId: string; muzzle: { x: number; y: number }; converted: boolean; active: boolean }[];
         shots: (import('./simulation').Shot & { pose: { x: number; y: number } })[];
       };
     };

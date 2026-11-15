@@ -2,6 +2,14 @@ import shipped from './defaults.json' with { type: 'json' };
 
 const field = (label: string, unit: string, min: number, max: number, step: number) => ({ label, unit, min, max, step, toggle: false });
 const toggle = (label: string) => ({ ...field(label, '', 0, 1, 1), toggle: true });
+const burstFields = () => ({
+  count: field('Particle count', '0 = off', 0, 24, 1),
+  size: field('Particle size', 'world px; 0 = off', 0, 4, 1),
+  life: field('Particle lifetime', 's', 0.05, 1, 0.01),
+  spread: field('Emission spread', 'world px', 0, 30, 1),
+  speed: field('Launch speed', 'px/s', 0, 100, 1),
+});
+export const JUMP_EFFECT_SECTIONS = ['jumpBurst', 'doubleJumpBurst', 'jumpTrail'] as const;
 export const FIELDS = {
   character: {
     speed: field('Move speed', 'px/s', 30, 240, 1),
@@ -57,6 +65,15 @@ export const FIELDS = {
     inactiveOpacity: field('Inactive enemy opacity', 'alpha', 0.2, 1, 0.05),
     highlightStrength: field('Staged lineage glow', 'alpha', 0, 1, 0.05),
   },
+  jumpBurst: burstFields(),
+  doubleJumpBurst: burstFields(),
+  jumpTrail: {
+    rate: field('Trail density', 'particles/s; 0 = off', 0, 60, 1),
+    size: field('Particle size', 'world px; 0 = off', 0, 4, 1),
+    life: field('Particle lifetime', 's', 0.05, 1, 0.01),
+    spread: field('Emission spread', 'world px', 0, 20, 1),
+    speed: field('Downward drift', 'px/s', 0, 60, 1),
+  },
   coins: {
     popSpeed: field('Coin pop speed', 'px/s', 40, 160, 1),
     spread: field('Coin launch spread', 'px/s', 10, 90, 1),
@@ -101,6 +118,7 @@ export const SECTIONS: Record<Section, string> = {
   branches: 'Forks & held merge', camera: 'Camera feel', effects: 'Pixels, highlights & particles', audio: 'Merge audio',
   crt: 'CRT monitor optics', motion: 'Object motion aberration',
   coins: 'Coin pop & bounce',
+  jumpBurst: 'First-jump poof', doubleJumpBurst: 'Double-jump poof', jumpTrail: 'Jump trail',
 };
 export const RESTART_SECTIONS: Section[] = ['enemies', 'branches'];
 export const entries = <T extends object>(object: T) => Object.entries(object) as [keyof T, T[keyof T]][];
@@ -116,10 +134,10 @@ function exactKeys(object: Record<string, unknown>, keys: string[], name: string
 export function parseTuning(data: unknown): Tuning {
   const root = record(data, 'Tuning file');
   exactKeys(root, ['format', 'version', 'values'], 'Tuning file');
-  if (root.format !== 'forking-hell-tuning' || (root.version !== 1 && root.version !== 2)) throw new Error('Unsupported tuning format or version. Expected forking-hell-tuning version 1 or 2.');
+  if (root.format !== 'forking-hell-tuning' || (root.version !== 1 && root.version !== 2 && root.version !== 3)) throw new Error('Unsupported tuning format or version. Expected forking-hell-tuning version 1, 2 or 3.');
   let values = record(root.values, 'values');
   if (root.version === 1) {
-    exactKeys(values, Object.keys(FIELDS).filter(key => !['crt', 'motion', 'coins'].includes(key)), 'version 1 values');
+    exactKeys(values, Object.keys(FIELDS).filter(key => !['crt', 'motion', 'coins', ...JUMP_EFFECT_SECTIONS].includes(key)), 'version 1 values');
     const branches = record(values.branches, 'version 1 branches');
     const eased = Object.hasOwn(branches, 'liftEase') || Object.hasOwn(branches, 'collapseEase');
     exactKeys(branches, ['length', 'height', 'transition', 'holdDelay', ...(eased ? ['liftEase', 'collapseEase'] : [])], 'version 1 branches');
@@ -134,6 +152,15 @@ export function parseTuning(data: unknown): Tuning {
       coins: { ...shipped.values.coins },
     };
   }
+  if (root.version === 2) {
+    exactKeys(values, Object.keys(FIELDS).filter(key => !JUMP_EFFECT_SECTIONS.some(section => section === key)), 'version 2 values');
+  }
+  if (root.version !== 3) {
+    values = {
+      ...values, jumpBurst: { ...shipped.values.jumpBurst },
+      doubleJumpBurst: { ...shipped.values.doubleJumpBurst }, jumpTrail: { ...shipped.values.jumpTrail },
+    };
+  }
   exactKeys(values, Object.keys(FIELDS), 'values');
   for (const [section, fields] of entries(FIELDS)) {
     const value = record(values[section], section);
@@ -142,7 +169,7 @@ export function parseTuning(data: unknown): Tuning {
       const n = value[key];
       if (typeof n !== 'number' || !Number.isFinite(n) || n < f.min || n > f.max) throw new Error(`${section}.${key} must be a finite number from ${f.min} to ${f.max}.`);
       if (f.toggle && n !== 0 && n !== 1) throw new Error(`${section}.${key} must be 0 (off) or 1 (on).`);
-      if ((key === 'particles' || key === 'successThreshold' || key === 'length' || key === 'height') && !Number.isInteger(n)) throw new Error(`${section}.${key} must be a whole number.`);
+      if (['particles', 'successThreshold', 'length', 'height', 'count', 'size'].includes(key) && !Number.isInteger(n)) throw new Error(`${section}.${key} must be a whole number.`);
     }
   }
   // Shape and every numeric leaf were validated above; clone so callers cannot mutate the import.
@@ -153,7 +180,7 @@ export function parseTuning(data: unknown): Tuning {
 }
 export const DEFAULTS: Tuning = parseTuning(shipped);
 export function tuningDocument(values: Tuning): { format: string; version: number; values: Tuning } {
-  return { format: 'forking-hell-tuning', version: 2, values: structuredClone(values) };
+  return { format: 'forking-hell-tuning', version: 3, values: structuredClone(values) };
 }
 export function needsRestart(before: Tuning, after: Tuning): boolean {
   return RESTART_SECTIONS.some(section => JSON.stringify(before[section]) !== JSON.stringify(after[section]));

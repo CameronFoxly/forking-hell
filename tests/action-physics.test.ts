@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Simulation, encounters, CHUNK } from '../src/simulation';
-import { DEFAULTS, parseTuning, tuningDocument } from '../src/tuning';
+import { DEFAULTS, JUMP_EFFECT_SECTIONS, parseTuning, tuningDocument } from '../src/tuning';
 
 const idle = { move: 0, jump: false, branch: false, merge: false };
 const ticks = (game: Simulation, count: number, input = idle) => { for (let n = 0; n < count; n++) game.step(input); };
@@ -106,6 +106,7 @@ describe('timing and migration', () => {
   it.each([false, true])('strictly migrates the historical v1 shape with easing=%s', eased => {
     const old: Record<string, unknown> = structuredClone(DEFAULTS);
     delete old.crt; delete old.motion; delete old.coins;
+    for (const section of JUMP_EFFECT_SECTIONS) delete old[section];
     old.branches = { length: 24, height: 58, transition: .8, holdDelay: .1, ...(eased ? { liftEase: 4, collapseEase: 2 } : {}) };
     const migrated = parseTuning({ format: 'forking-hell-tuning', version: 1, values: old });
     expect(migrated.branches.liftDuration).toBe(.8);

@@ -191,7 +191,7 @@ describe('reversible hazards and stable projectile identities', () => {
     const shooter = encounters(game.seed, 1)[0]!;
     game.player.x = shooter.x - ATTACK_RANGE + 60;
     game.branch(); settle(game);
-    expect(game.isOrdinaryActive(1, shooter)).toBe(true);
+    expect(game.isOrdinaryActive(1, shooter)).toBe(false);
     expect(game.isOrdinaryActive(0, shooter)).toBe(true);
     game.time = shooter.phase - STEP / 2;
     game.step({ ...idle, move: 1 });

@@ -201,7 +201,7 @@ export class WorldRenderer {
         }
         if (activated) {
           this.highlightedCopies++;
-          const switchOnly = depth === game.depth && hazard.kind !== 'shooter';
+          const switchOnly = !game.isOrdinaryActive(depth, hazard);
           const sx = screenX(switchOnly ? hazard.x : pose.x);
           const y = screenY(game.surfaceAt(depth, switchOnly ? hazard.x : pose.x).height), sy = y - 15;
           const pulse = view.reducedMotion ? 1 : .75 + .25 * Math.sin(game.realTime * 5);
@@ -220,7 +220,7 @@ export class WorldRenderer {
         }
         if (depth === game.depth && depth > 0) {
           const sx = screenX(hazard.x);
-          const sy = screenY(game.surfaceAt(depth, hazard.x).height) - (hazard.kind === 'shooter' ? 43 : 15);
+          const sy = screenY(game.surfaceAt(depth, hazard.x).height) - 15;
           const staged = branch.staged.has(hazard.id);
           if (staged) {
             const length = Math.max(0, screenY(game.surfaceAt(depth - 1, hazard.x).height) - 15 - sy - 7);
@@ -231,7 +231,7 @@ export class WorldRenderer {
             }
           }
           this.ring(sx, sy, staged ? C.cyan : C.gold, 5);
-          this.motion.rect(`switch:${branch.id}:${hazard.id}`, hazard.x, game.surfaceAt(depth, hazard.x).height + (hazard.kind === 'shooter' ? 43 : 15), 10, 10, staged ? C.cyan : C.gold);
+          this.motion.rect(`switch:${branch.id}:${hazard.id}`, hazard.x, game.surfaceAt(depth, hazard.x).height + 15, 10, 10, staged ? C.cyan : C.gold);
           if (staged) g.fillStyle(C.cyan).fillRect(sx - 2, sy - 2, 4, 4);
           else g.fillStyle(C.ink).fillRect(sx - 2, sy - 2, 4, 4);
         }
@@ -279,6 +279,15 @@ export class WorldRenderer {
         this.motion.rect(`burst:${this.burstIds.get(burst)}:${i}`, burst.x + Math.cos(angle) * radius + 1,
           game.surfaceAt(depth, burst.x).height + 11 - Math.sin(angle) * radius - burst.age * burst.age * 50, 2, 2, color);
       }
+    }
+    if (!view.reducedMotion) for (const particle of game.jumpParticles) {
+      if (!game.jumpEffectEnabled(particle.kind)) continue;
+      const pose = game.jumpParticlePose(particle);
+      if (pose.x < this.cameraX - 8 || pose.x > right + 8 || pose.y < this.camera.bottom - 8 || pose.y > this.camera.top + 8) continue;
+      const color = particle.kind === 'second' ? C.cyan : particle.kind === 'first' ? C.pale : C.violet;
+      g.fillStyle(color, pose.alpha * (particle.kind === 'trail' ? .65 : .85))
+        .fillRect(screenX(pose.x) - Math.floor(pose.size / 2), screenY(pose.y) - Math.floor(pose.size / 2), pose.size, pose.size);
+      this.motion.rect(`jump-particle:${particle.id}`, pose.x, pose.y, pose.size, pose.size, color);
     }
     for (let i = this.usedEnemies; i < this.enemies.length; i++) this.enemies[i]!.setVisible(false);
     g = this.hud.clear();
@@ -331,9 +340,9 @@ export class WorldRenderer {
 export function hint(game: Simulation, touch = false): [string, string] {
   const t = game.tutorial;
   if (!t.moved) return ['THE WORLD WAITS FOR YOU', touch ? 'HOLD RIGHT TO MOVE. RELEASE. HOLD LEFT TO REVERSE.' : 'A / D OR ARROWS: MOVE RIGHT. STOP. REVERSE LEFT.'];
-  if (!t.jumped) return ['YOU CAN ALWAYS JUMP', touch ? 'TAP JUMP EVEN WHEN TIME IS STANDING STILL.' : 'SPACE: JUMP EVEN WHEN TIME IS STANDING STILL.'];
+  if (!t.jumped) return ['JUMP, THEN JUMP AGAIN', touch ? 'HOLD JUMP HIGHER. RELEASE AND TAP AGAIN IN AIR.' : 'HOLD SPACE HIGHER. RELEASE AND PRESS AGAIN IN AIR.'];
   if (!t.branched) return ['MAKE A DIFFERENT PATH', touch ? 'TAP FORK. ORDINARY DANGER BECOMES A SWITCH.' : 'W / UP: FORK. ORDINARY DANGER BECOMES A SWITCH.'];
-  if (!t.staged) return ['STAGE YOUR ESCAPE', 'TOUCH A GOLD COMMIT RING. SHOOTERS STAY ACTIVE.'];
+  if (!t.staged) return ['STAGE YOUR ESCAPE', 'TOUCH A GOLD COMMIT RING. WATCH FOR SHOTS BELOW.'];
   if (!t.merged) return ['BRING IT HOME', touch ? 'TAP MERGE. STAGED DANGER BECOMES COINS BELOW.' : 'S / DOWN: MERGE ONE LEVEL. STAGED DANGER BECOMES COINS.'];
   if (!t.collected) return ['GO BACK FOR WHAT YOU MADE', 'REVERSE LEFT TO COLLECT. YOUR REWARDS STAY YOURS.'];
   return ['MORE BRANCHES. MORE CROSSFIRE.', 'FORK. STAGE. MERGE. HOW FAR CAN YOU TAKE IT?'];

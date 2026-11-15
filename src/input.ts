@@ -24,7 +24,7 @@ export class Controls {
       if (!bindings[e.code]) return;
       e.preventDefault();
       if (e.repeat && !this.keys.has(e.code)) return;
-      if (!e.repeat) this.edges.add(bindings[e.code]!);
+      if (!e.repeat && !this.activeActions().has(bindings[e.code]!)) this.edges.add(bindings[e.code]!);
       this.keys.add(e.code);
       this.paintPressed();
       this.onGesture();
@@ -39,14 +39,17 @@ export class Controls {
       button.addEventListener('keydown', e => {
         if (e.code !== 'Space' && e.code !== 'Enter') return;
         e.preventDefault();
-        if (!e.repeat) { this.edges.add(action); this.buttonKeys.set(e.code, action); }
+        if (!e.repeat) {
+          if (!this.activeActions().has(action)) this.edges.add(action);
+          this.buttonKeys.set(e.code, action);
+        }
         this.paintPressed(); this.onGesture();
       }, options);
       button.addEventListener('pointerdown', e => {
         e.preventDefault();
         button.setPointerCapture(e.pointerId);
+        if (!this.activeActions().has(action)) this.edges.add(action);
         this.pointers.set(e.pointerId, action);
-        this.edges.add(action);
         this.paintPressed();
         this.onGesture();
       }, options);
@@ -63,12 +66,11 @@ export class Controls {
   }
 
   sample(): Input {
-    const active = new Set([...this.keys].map(k => bindings[k]));
-    for (const action of this.pointers.values()) active.add(action);
-    for (const action of this.buttonKeys.values()) active.add(action);
+    const active = this.activeActions();
     const input = {
       move: Number(active.has('right')) - Number(active.has('left')),
       jump: active.has('jump') || this.edges.has('jump'),
+      jumpPressed: this.edges.has('jump'),
       branch: active.has('branch') || this.edges.has('branch'),
       merge: active.has('merge') || this.edges.has('merge'),
     };
@@ -81,10 +83,15 @@ export class Controls {
     this.paintPressed();
   }
 
-  private paintPressed(): void {
-    const active = new Set([...this.keys].map(key => bindings[key]));
+  private activeActions(): Set<Action> {
+    const active = new Set([...this.keys].map(key => bindings[key]!));
     for (const action of this.pointers.values()) active.add(action);
     for (const action of this.buttonKeys.values()) active.add(action);
+    return active;
+  }
+
+  private paintPressed(): void {
+    const active = this.activeActions();
     for (const key of document.querySelectorAll<HTMLElement>('[data-control], [data-keycap]')) {
       key.classList.toggle('pressed', active.has((key.dataset.control ?? key.dataset.keycap) as Action));
     }

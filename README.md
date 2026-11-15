@@ -13,7 +13,7 @@ No install or account needed. Choose **Enter the graph** to start.
 **Move right to advance the environment, stop to freeze it, and move left to reverse it.** Time follows actual movement, so pushing against a wall does not advance it. During play, your jumps, gravity, coin drops and triggered effects keep moving forward. A frozen hazard can still hurt you if you fall into it.
 
 1. **Fork:** Create a higher branch with a walkable ramp behind you; the parent lane continues underneath. Fork again to go deeper; there is no arbitrary gameplay depth cap.
-2. **Stage:** Move or jump the Octocat into a gold commit ring. Only the newest, top branch exposes switches, and staged targets highlight their corresponding copies on ancestor branches. Ordinary hazards become switches on the top branch, but shooter copies stay active on every unconverted branch and fire across lanes.
+2. **Stage:** Move or jump the Octocat into a gold commit ring. All enemies, including shooters, become switches on the highest fork. Every unconverted lower shooter still fires across lanes; main without a fork remains dangerous. Staged targets highlight their corresponding copies on ancestor branches.
 3. **Merge:** Collapse one branch into its parent. Staged counterparts below pop into bouncing coins when the descending platform reaches them, not when Merge is pressed. Nested stages carry down one merge at a time. Tap for one merge, or hold to continue down the stack after each eased collapse. Each obstacle copy can reward once.
 
 **Reversal is not undo.** Stages, merges, destruction and collected rewards stay permanent for the current run. Unstaged hazards remain dangerous, and forking or merging does not make you invulnerable.
@@ -25,7 +25,7 @@ Three hits end the run. Score comes from **5 points per new game unit of forward
 | Action | Keyboard | Touch |
 | --- | --- | --- |
 | Move / control time | A / D or left / right arrows | Hold left / right |
-| Jump: tap low / hold twice as high | Space | Jump |
+| Jump: tap low / hold twice as high; release and press again for one air jump | Space | Jump |
 | Fork above | W or up arrow | Fork |
 | Merge down: tap once / hold to repeat | S or down arrow | Merge |
 | Pause / settings | Escape | Pause |
@@ -46,9 +46,11 @@ Open **Tune** in the top bar and expand a section to adjust sliders, numeric val
 
 **Lift duration** and **Collapse duration** are independent, with separate easing controls. **Full-held jump height** is the maximum (initially 56 pixels); the shortest tap is half that. Completed merge landings give one brief camera-shake pulse, using the shared **Impact shake** controls; reduced effects disables it. CRT monitor optics and motion-driven channel splitting can be adjusted or disabled independently. See [Tuning](docs/TUNING.md) for the full contract.
 
+Both jumps use the same height controls. Landing restores the air jump; branching and merging alone do not. **First-jump poof**, **Double-jump poof** and **Jump trail** have independent live controls. Reduced effects disables these particles. Outer letterboxing and panels are pure black; the gameplay palette stays near-black purple.
+
 Held merges wait for each collapse animation, then any **Extra delay after merge tween** (`branches.holdDelay`). Its default is **0 seconds**, so there is no additional repeat delay.
 
-**Export JSON** downloads `forking-hell-tuning-v2.json`: the complete **effective configuration**, never unapplied edits. Apply any pending new-run changes before exporting values you want to keep. **Import JSON** loads a complete configuration using the same live/new-run rules; **Reset defaults** restores the shipped values through those rules.
+**Export JSON** downloads `forking-hell-tuning-v3.json`: the complete **effective configuration**, never unapplied edits. Apply any pending new-run changes before exporting values you want to keep. **Import JSON** loads a complete configuration using the same live/new-run rules; complete v2 presets retain every existing value and gain only the new jump-effect defaults. **Reset defaults** restores the shipped values through those rules.
 
 The document uses `format: "forking-hell-tuning"`, `version: 2`, and a `values` object containing every tuning section and field. Complete historical v1 presets migrate with an explanation: shared timing becomes equal lift/collapse durations, coin settings use defaults, and CRT/motion start disabled. Import validates the full schema and numeric ranges; partial presets are not accepted. Tuning is tab-local, not saved with your pause preferences, so export before reloading.
 

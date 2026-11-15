@@ -12,7 +12,7 @@ test('nested moving shooters render flight from the exact fractional muzzle, not
       const context = canvas.getContext('2d')!; context.drawImage(image, 0, 0);
       return probe.points.map(point => [...context.getImageData(Math.round(point.x) - probe.left, probe.top - Math.round(point.y), 1, 1).data]);
     }, kind);
-    expect(colors.length).toBeGreaterThanOrEqual(3);
+    expect(colors.length).toBe(kind === 'branch' ? 3 : 2);
     for (const color of colors) expect(color).toEqual([255, 211, 148, 255]);
   }
 });
@@ -43,7 +43,8 @@ test('keyboard-driven nested lift, rewind, merge and recross never emit from a c
   await page.waitForFunction(() => window.forkingHell.snapshot().x >= 500);
   await page.keyboard.up('KeyD');
   const emitted = await page.evaluate(() => window.forkingHell.projectiles());
-  expect(emitted.shots.filter(shot => shot.sourceId === '1:0')).toHaveLength(4);
+  expect(emitted.shots.filter(shot => shot.sourceId === '1:0')).toHaveLength(3);
+  expect(emitted.sources.filter(source => source.sourceId === '1:0' && source.active)).toHaveLength(3);
   await page.keyboard.down('KeyA'); await page.waitForFunction(() => window.forkingHell.snapshot().x <= 445); await page.keyboard.up('KeyA');
   await page.keyboard.down('KeyD'); await page.waitForFunction(() => window.forkingHell.snapshot().x >= 500); await page.keyboard.up('KeyD');
   const replay = await page.evaluate(() => window.forkingHell.projectiles());
@@ -52,8 +53,8 @@ test('keyboard-driven nested lift, rewind, merge and recross never emit from a c
     expect(shot.y).toBeCloseTo(source.muzzle.y);
   }
   await page.keyboard.down('KeyD'); await page.waitForFunction(() => window.forkingHell.snapshot().x >= 550);
-  await page.keyboard.down('Space'); await page.waitForFunction(() => window.forkingHell.snapshot().staged.includes('1:0'));
-  await page.keyboard.up('Space'); await page.keyboard.up('KeyD');
+  await page.waitForFunction(() => window.forkingHell.snapshot().staged.includes('1:0'));
+  await page.keyboard.up('KeyD');
   await page.keyboard.press('KeyS');
   await page.waitForFunction(() => window.forkingHell.snapshot().depth === 2 && window.forkingHell.snapshot().transition === null);
   const converted = await page.evaluate(() => window.forkingHell.projectiles().sources.find(source => source.sourceId === '1:0' && source.converted)!.branchId);

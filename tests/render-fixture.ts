@@ -80,7 +80,8 @@ class Probe extends Phaser.Scene {
       });
       return {
         image, left: world.sourceLeft, top: world.sourceTop,
-        points: simulation.branches.map((branch, depth) => {
+        points: simulation.branches.flatMap((branch, depth) => {
+          if (!simulation.isOrdinaryActive(depth, shooter)) return [];
           const muzzle = simulation.shooterMuzzle(depth, shooter, shooter.phase, birthAge);
           const shot = [...simulation.shots.values()].find(shot => shot.branchId === branch.id && shot.birth === shooter.phase)!;
           return { x: muzzle.x + shot.vx * (simulation.time - shot.birth), y: muzzle.y + shot.vy * (simulation.time - shot.birth) };

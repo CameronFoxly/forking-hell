@@ -15,7 +15,7 @@ export const SHOT_SPEED = DEFAULTS.enemies.shotSpeed;
 export const ATTACK_RANGE = SHOT_LIFE * SHOT_SPEED + 30;
 
 export type HazardKind = 'patrol' | 'spinner' | 'shooter' | 'gate';
-export type Input = { move: number; jump: boolean; branch: boolean; merge: boolean };
+export type Input = { move: number; jump: boolean; jumpPressed?: boolean; branch: boolean; merge: boolean };
 export type Encounter = { id: string; kind: HazardKind; x: number; phase: number; period: number };
 export type Branch = {
   id: number;
@@ -27,6 +27,9 @@ export type Branch = {
 export type Shot = { id: string; branchId: number; sourceId: string; birth: number; x: number; y: number; vx: number; vy: number; retired?: boolean };
 export type Coin = { id: string; branchId: number; x: number; y: number; vx: number; vy: number; bornAt: number; collected: boolean };
 export type Burst = { x: number; branchId: number; age: number; kind: 'stage' | 'merge' | 'coin' | 'hit' | 'fork' };
+export type JumpParticleKind = 'first' | 'second' | 'trail';
+export type JumpParticle = { id: number; kind: JumpParticleKind; x: number; y: number; vx: number; vy: number; bornAt: number; life: number; size: number };
+export const MAX_JUMP_PARTICLES = 128;
 export type Transition = { kind: 'branch' | 'merge'; age: number; from: number };
 export type GameEvent = 'jump' | 'land' | 'branch' | 'stage' | 'merge' | 'destroy' | 'combo' | 'coin' | 'hit' | 'over';
 export type Player = { x: number; y: number; vy: number; grounded: boolean; health: number; invulnerable: number; facing: -1 | 1 };
@@ -122,6 +125,7 @@ export class Simulation {
   readonly shots = new Map<string, Shot>();
   readonly awarded = new Set<string>();
   readonly bursts: Burst[] = [];
+  readonly jumpParticles: JumpParticle[] = [];
   readonly events: GameEvent[] = [];
   readonly chunks = new Map<number, Encounter[]>();
   time = 0;
@@ -142,6 +146,7 @@ export class Simulation {
   private readonly branchShots = new Map<number, Set<Shot>>();
   private readonly sourceShots = new Map<string, Set<Shot>>();
   private readonly orphanedShots = new Set<Shot>();
+  private readonly detachedShots = new Set<Shot>();
   private readonly coinBuckets = new Map<number, Set<Coin>>();
   private readonly coinCells = new Map<string, Set<Coin>>();
   coinPhysicsCount = 0;
@@ -153,6 +158,9 @@ export class Simulation {
   private mergeBlocked = false;
   private jumpFlight: { height: number; age: number; rise: number; holdWindow: number; released: boolean } | null = null;
   private shakeAt = -Infinity;
+  private airJumpReady = true;
+  private nextJumpParticle = 0;
+  private trailCarry = 0;
 
   constructor(seed = 0xf04c, public config: Tuning = structuredClone(DEFAULTS)) {
     this.seed = seed;
@@ -165,6 +173,7 @@ export class Simulation {
   get lane(): number { return this.config.branches.height; }
   get unit(): number { return this.config.branches.length; }
   get shakeAge(): number { return this.realTime - this.shakeAt; }
+  get airJumpAvailable(): boolean { return this.airJumpReady; }
   get transitionDuration(): number { return this.transition?.kind === 'merge' ? this.config.branches.collapseDuration : this.config.branches.liftDuration; }
   pose(hazard: Encounter, time = this.time): ReturnType<typeof hazardPose> { return hazardPose(hazard, time, this.config.enemies); }
   shotPose(shot: Shot): ReturnType<typeof shotPosition> { return shot.retired ? null : shotPosition(shot, this.time, this.config.enemies.shotLife); }
@@ -218,7 +227,7 @@ export class Simulation {
   }
 
   isOrdinaryActive(depth: number, hazard: Encounter): boolean {
-    return !this.isConverted(depth, hazard.id) && (hazard.kind === 'shooter' || depth !== this.depth || depth === 0);
+    return !this.isConverted(depth, hazard.id) && (depth !== this.depth || depth === 0);
   }
 
   setPaused(paused: boolean): void {
@@ -283,11 +292,7 @@ export class Simulation {
         parent.converted.add(id);
         this.firstConvertedDepth.set(id, Math.min(this.firstConvertedDepth.get(id) ?? Infinity, this.depth - 1));
         if (target.kind === 'shooter') for (const branch of [parent, child]) {
-          for (const shot of this.sourceShots.get(`${branch.id}/${id}`) ?? []) {
-            if (shot.retired) continue;
-            if (this.time > shot.birth && this.shotPose(shot)) this.orphanedShots.add(shot);
-            else this.retireShot(shot);
-          }
+          this.retainAirborneShots(this.sourceShots.get(`${branch.id}/${id}`) ?? []);
         }
         const rewardId = `${parent.id}/${id}`;
         if (!this.awarded.has(rewardId)) {
@@ -324,13 +329,16 @@ export class Simulation {
     }
     if (parentCoins.size) this.branchCoins.set(parent.id, parentCoins);
     this.branchCoins.delete(child.id);
-    for (const shot of this.branchShots.get(child.id) ?? []) {
-      this.retireShot(shot);
-      this.shots.delete(shot.id);
+    const childShots = this.branchShots.get(child.id) ?? [];
+    this.retainAirborneShots(childShots);
+    for (const shot of childShots) {
+      if (shot.retired) this.shots.delete(shot.id);
+      else this.detachedShots.add(shot);
       this.sourceShots.delete(`${child.id}/${shot.sourceId}`);
     }
     this.branchShots.delete(child.id);
     this.branches.pop();
+    if (this.depth > 0) this.retainAirborneShots(this.branchShots.get(parent.id) ?? []);
     this.tutorial.merged = true;
     this.shakeAt = this.realTime;
     this.events.push('merge');
@@ -480,6 +488,14 @@ export class Simulation {
     if (!shot.retired) this.unindexShot(shot);
     shot.retired = true;
     this.orphanedShots.delete(shot);
+    if (this.detachedShots.delete(shot)) this.shots.delete(shot.id);
+  }
+
+  private retainAirborneShots(shots: Iterable<Shot>): void {
+    for (const shot of shots) {
+      if (!shot.retired && this.time > shot.birth && this.shotPose(shot)) this.orphanedShots.add(shot);
+      else this.retireShot(shot);
+    }
   }
 
   shotsNear(minX: number, maxX: number, minY: number, maxY: number): Set<Shot> {
@@ -501,7 +517,7 @@ export class Simulation {
     for (let n = first; n <= last; n++) {
       const id = `${branch.id}/${hazard.id}/${n}`;
       const previous = this.shots.get(id), birth = n * hazard.period + phase;
-      if (previous?.retired || previous && birth < start) continue;
+      if (previous && birth < start) continue;
       const ratio = (birth - start) / (end - start);
       const { x, y } = this.shooterMuzzle(depth, hazard, birth, Math.min(this.transitionDuration, oldAge + dt * ratio));
       const dx = oldX + (this.player.x - oldX) * ratio - x;
@@ -514,7 +530,7 @@ export class Simulation {
         vy: distance > 0 ? dy / distance * this.config.enemies.shotSpeed : 0,
       };
       // A living re-emission may have a new action-clock support, but an airborne shot never follows it.
-      if (previous) { this.unindexShot(shot); shot.x = x; shot.y = y; }
+      if (previous) { this.unindexShot(shot); shot.x = x; shot.y = y; shot.retired = false; this.orphanedShots.delete(shot); }
       this.shots.set(id, shot);
       const owned = this.branchShots.get(branch.id) ?? new Set<Shot>();
       owned.add(shot);
@@ -529,15 +545,56 @@ export class Simulation {
     }
   }
 
-  step(input: Input = EMPTY_INPUT, dt = STEP): void {
+  private jumpSettings(kind: JumpParticleKind) {
+    return kind === 'first' ? this.config.jumpBurst : kind === 'second' ? this.config.doubleJumpBurst : this.config.jumpTrail;
+  }
+
+  jumpEffectEnabled(kind: JumpParticleKind): boolean {
+    const settings = this.jumpSettings(kind);
+    return settings.size > 0 && ('count' in settings ? settings.count : settings.rate) > 0;
+  }
+
+  jumpParticlePose(particle: JumpParticle): { x: number; y: number; alpha: number; size: number } {
+    const age = this.realTime - particle.bornAt;
+    return {
+      x: particle.x + particle.vx * age,
+      y: particle.y + particle.vy * age - (particle.kind === 'trail' ? 0 : 40 * age * age),
+      alpha: Math.max(0, 1 - age / particle.life),
+      size: Math.max(1, Math.ceil(particle.size * (1 - age / particle.life))),
+    };
+  }
+
+  private emitJumpParticles(kind: JumpParticleKind, count: number, x: number, y: number): void {
+    if (!this.jumpEffectEnabled(kind)) return;
+    const settings = this.jumpSettings(kind);
+    for (let i = 0; i < count; i++) {
+      const id = this.nextJumpParticle++, random = hash(this.seed, id + 991) / 0xffffffff;
+      const angle = i * 2.399 + random * Math.PI * 2;
+      if (this.jumpParticles.length === MAX_JUMP_PARTICLES) this.jumpParticles.shift();
+      this.jumpParticles.push({
+        id, kind, x: x + Math.cos(angle) * settings.spread / 2,
+        y: y + 1 + Math.sin(angle) * settings.spread / 4,
+        vx: Math.cos(angle) * settings.speed * (kind === 'trail' ? .3 : 1),
+        vy: kind === 'trail' ? -settings.speed : Math.sin(angle) * settings.speed * .6 - settings.speed * .2,
+        bornAt: this.realTime, life: settings.life, size: settings.size,
+      });
+    }
+  }
+
+  step(input: Input = EMPTY_INPUT, dt = STEP, reducedEffects = false): void {
     if (this.paused || this.gameOver) return;
     if (!(dt > 0 && dt <= 1 / 30)) throw new Error('Simulation requires a positive fixed step of at most 1/30s');
     this.realTime += dt;
+    if (reducedEffects) this.jumpParticles.length = 0;
+    for (let i = this.jumpParticles.length - 1; i >= 0; i--) {
+      const particle = this.jumpParticles[i]!;
+      if (this.realTime - particle.bornAt >= particle.life || !this.jumpEffectEnabled(particle.kind)) this.jumpParticles.splice(i, 1);
+    }
     const oldWorldY = this.playerWorldY;
     const oldTransitionAge = this.transition?.age ?? 0;
     const wasGrounded = this.player.grounded;
     this.player.invulnerable = Math.max(0, this.player.invulnerable - dt);
-    const jump = input.jump && !this.held.jump;
+    const jump = input.jump && (input.jumpPressed === true || !this.held.jump);
     const fork = input.branch && !this.held.branch;
     if (!this.transition) this.mergeWait = Math.max(0, this.mergeWait - dt);
     if (!input.merge) { this.endMergeHold(); this.mergeBlocked = false; }
@@ -546,13 +603,17 @@ export class Simulation {
     this.held = { jump: input.jump, branch: input.branch, merge: input.merge };
     if (fork) this.branch();
     else if (merge) this.merge();
-    if (jump && this.player.grounded) {
+    if (jump && (this.player.grounded || this.airJumpReady)) {
+      const airborne = !this.player.grounded;
+      if (airborne) this.airJumpReady = false;
       this.player.vy = Math.sqrt(2 * this.config.physics.gravity * this.config.physics.jumpHeight);
       this.jumpFlight = {
         height: this.config.physics.jumpHeight, age: 0, rise: 0,
         holdWindow: this.player.vy / this.config.physics.gravity, released: false,
       };
       this.player.grounded = false;
+      if (!reducedEffects) this.emitJumpParticles(airborne ? 'second' : 'first',
+        airborne ? this.config.doubleJumpBurst.count : this.config.jumpBurst.count, this.player.x, oldWorldY);
       this.events.push('jump');
       this.tutorial.jumped = true;
     }
@@ -628,6 +689,7 @@ export class Simulation {
       if (this.player.y <= 0) {
         this.player.y = 0; this.player.vy = 0; this.player.grounded = true;
         this.jumpFlight = null;
+        this.airJumpReady = true;
       }
     }
     if (!wasGrounded && this.player.grounded) this.events.push('land');
@@ -642,8 +704,7 @@ export class Simulation {
     for (const hazard of hazards) {
       if (hazard.x < this.branches[physicalDepth]!.forkX || this.isConverted(physicalDepth, hazard.id)) continue;
       if (physicalDepth === this.depth && this.depth > 0) {
-        const switchY = hazard.kind === 'shooter' ? 43 : 15;
-        const targetY = this.surfaceAt(this.depth, hazard.x).height + switchY;
+        const targetY = this.surfaceAt(this.depth, hazard.x).height + 15;
         if (!this.transition && Math.abs(this.player.x - hazard.x) < 18 && Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - targetY) < 18 && this.stage(hazard.id)) {
           this.bursts.push({ x: hazard.x, branchId: this.top.id, age: 0, kind: 'stage' });
         }
@@ -665,11 +726,11 @@ export class Simulation {
       }
     }
 
-    // All active layers keep ranged sources. The finite projectile lifetime bounds relevance, not the viewport.
+    // The highest fork exposes switches; lower living sources retain their own firing events.
     for (let depth = 0; depth <= this.depth; depth++) {
       const branch = this.branches[depth]!;
       for (const hazard of hazards) {
-        if (hazard.kind === 'shooter' && hazard.x >= branch.forkX && !this.isConverted(depth, hazard.id) &&
+        if (hazard.kind === 'shooter' && hazard.x >= branch.forkX && this.isOrdinaryActive(depth, hazard) &&
           Math.abs(heightAt(depth, hazard.x) - this.playerWorldY) <= this.attackRange) {
           this.emitShots(hazard, depth, oldTime, this.time, oldTransitionAge, dt, oldX, oldWorldY);
         }
@@ -735,5 +796,11 @@ export class Simulation {
       }
       this.transition = null;
     }
+    if (!reducedEffects && !this.player.grounded && this.jumpFlight && this.jumpEffectEnabled('trail')) {
+      this.trailCarry += this.config.jumpTrail.rate * dt;
+      const count = Math.floor(this.trailCarry);
+      this.trailCarry -= count;
+      this.emitJumpParticles('trail', count, this.player.x, this.playerWorldY);
+    } else this.trailCarry = 0;
   }
 }
