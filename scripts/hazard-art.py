@@ -129,6 +129,15 @@ for index in range(16):
                 image.putpixel((x, y), color)
     frames[f"spinner-{index}"] = image
 
+activated_colors = {
+    (161, 123, 227, 255): (117, 246, 236, 255),
+    (213, 176, 255, 255): (245, 236, 255, 255),
+}
+for name, image in list(frames.items()):
+    activated = image.copy()
+    activated.putdata([activated_colors.get(pixel, pixel) for pixel in image.getdata()])
+    frames[f"activated-{name}"] = activated
+
 atlas = Image.new("RGBA", (26 * len(frames), 27))
 metadata = {"frames": {}, "meta": {"image": "hazards.png", "size": {"w": atlas.width, "h": atlas.height}}}
 for i, (name, image) in enumerate(frames.items()):

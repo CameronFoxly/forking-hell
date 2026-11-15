@@ -3,15 +3,16 @@ import Phaser from 'phaser';
 export const WIDTH = 480;
 export const HEIGHT = 270;
 export const COLORS = {
-  ink: 0x14102b, deep: 0x221943, shadow: 0x352558, muted: 0x6951a6,
+  ink: 0x08060f, deep: 0x221943, shadow: 0x352558, muted: 0x6951a6,
   violet: 0xa17be3, pale: 0xd5b0ff, cyan: 0x75f6ec, white: 0xf5ecff,
   gold: 0xffd394, danger: 0xff799d,
 };
 
 const shader = `
-precision mediump float;
+precision highp float;
 uniform sampler2D uMainSampler;
 uniform vec2 uResolution;
+uniform float uStrength;
 varying vec2 outTexCoord;
 vec3 best;
 float closest;
@@ -22,38 +23,48 @@ void candidate(vec3 source, vec3 color) {
 void main() {
     vec2 uv = (floor(outTexCoord * uResolution) + 0.5) / uResolution;
     vec4 texel = texture2D(uMainSampler, uv);
+    if (all(lessThan(abs(texel.rgb - vec3(20.0, 16.0, 43.0) / 255.0), vec3(0.5 / 255.0)))) {
+        texel.rgb = vec3(8.0, 6.0, 15.0) / 255.0;
+    }
     closest = 100.0;
     ${Object.values(COLORS).map(c => `candidate(texel.rgb, vec3(${(c >> 16) & 255}.0, ${(c >> 8) & 255}.0, ${c & 255}.0) / 255.0);`).join('\n')}
-    gl_FragColor = vec4(best, texel.a);
+    gl_FragColor = vec4(mix(texel.rgb, best, uStrength), texel.a);
 }`;
 
 class PaletteNode extends Phaser.Renderer.WebGL.RenderNodes.BaseFilterShader {
   runs = 0;
+  resolution = [0, 0];
+  strength = 1;
   constructor(manager: Phaser.Renderer.WebGL.RenderNodes.RenderNodeManager) {
     super('ForkPalette', manager, undefined, shader);
   }
   setupUniforms(_controller: Phaser.Filters.Controller, context: Phaser.Renderer.WebGL.DrawingContext): void {
     this.runs++;
+    this.resolution = [context.width, context.height];
     this.programManager.setUniform('uResolution', [context.width, context.height]);
+    this.programManager.setUniform('uStrength', this.strength);
   }
 }
 
-export function applyPixelComposition(scene: Phaser.Scene): PaletteNode {
+export function applyPixelComposition(scene: Phaser.Scene, world: Phaser.GameObjects.RenderTexture): PaletteNode {
   const renderer = scene.game.renderer;
   if (!(renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer)) throw new Error('WebGL is required for the shared pixel-composition shader.');
   const node = new PaletteNode(renderer.renderNodes);
   renderer.renderNodes.addNode('ForkPalette', node);
-  scene.cameras.main.filters.external.add(new Phaser.Filters.Controller(scene.cameras.main, 'ForkPalette'));
-  scene.cameras.main.setRoundPixels(true);
+  world.enableFilters();
+  if (!world.filters) throw new Error('The native world pixel filter could not initialize.');
+  world.filters.internal.add(new Phaser.Filters.Controller(world.filterCamera, 'ForkPalette'));
   return node;
 }
 
-export function fitCanvas(canvas: HTMLCanvasElement, viewport: HTMLElement): { scale: number; dpr: number; fits: boolean } {
+export function fitCanvas(game: Phaser.Game, viewport: HTMLElement): { scale: number; dpr: number; fits: boolean } {
+  const canvas = game.canvas;
   const dpr = window.devicePixelRatio || 1;
   const rect = viewport.getBoundingClientRect();
   const scale = Math.max(1, Math.floor(Math.min(rect.width * dpr / WIDTH, rect.height * dpr / HEIGHT)));
   const width = WIDTH * scale / dpr;
   const height = HEIGHT * scale / dpr;
+  if (canvas.width !== WIDTH * scale || canvas.height !== HEIGHT * scale) game.scale.resize(WIDTH * scale, HEIGHT * scale);
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   canvas.style.left = `${(Math.round((rect.left + (rect.width - width) / 2) * dpr) / dpr) - rect.left}px`;

@@ -69,7 +69,7 @@ describe('sprite-tester character contract', () => {
     const game = new Simulation();
     game.step({ move: 0, jump: true, branch: false, merge: false });
     let peak = game.player.y;
-    for (let i = 0; i < 60; i++) { game.step(); peak = Math.max(peak, game.player.y); }
+    for (let i = 0; i < 60; i++) { game.step({ move: 0, jump: true, branch: false, merge: false }); peak = Math.max(peak, game.player.y); }
     expect(STEP).toBe(1 / 60);
     expect(peak).toBeCloseTo(JUMP_HEIGHT, 1);
     expect(game.events.filter(e => e === 'land')).toHaveLength(1);

@@ -1,6 +1,10 @@
 import { performance } from 'node:perf_hooks';
 import { arch, platform } from 'node:os';
-import { Simulation, STEP, SPEED, CHUNK } from '../src/simulation.ts';
+import { createServer } from 'vite';
+
+const loader = await createServer({ server: { middlewareMode: true, hmr: false } });
+const { Simulation, STEP, SPEED, CHUNK } = await loader.ssrLoadModule('/src/simulation.ts');
+await loader.close();
 
 const input = { move: 0, jump: false, branch: false, merge: false };
 console.log(JSON.stringify({ platform: platform(), arch: arch(), node: process.version }));

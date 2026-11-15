@@ -1,3 +1,6 @@
+import { DEFAULTS } from './tuning';
+import type { Tuning } from './tuning';
+
 export const STEP = 1 / 60;
 export const UNIT = 24;
 export const LANE = 58;
@@ -22,10 +25,10 @@ export type Branch = {
   converted: Set<string>;
 };
 export type Shot = { id: string; branchId: number; sourceId: string; birth: number; x: number; y: number; vx: number; vy: number };
-export type Coin = { id: string; branchId: number; x: number; bornAt: number; offset: number; collected: boolean };
+export type Coin = { id: string; branchId: number; x: number; y: number; vx: number; vy: number; bornAt: number; collected: boolean };
 export type Burst = { x: number; branchId: number; age: number; kind: 'stage' | 'merge' | 'coin' | 'hit' | 'fork' };
-export type Transition = { kind: 'branch' | 'merge'; age: number; from: number; offset: number };
-export type GameEvent = 'jump' | 'land' | 'branch' | 'stage' | 'merge' | 'coin' | 'hit' | 'over';
+export type Transition = { kind: 'branch' | 'merge'; age: number; from: number };
+export type GameEvent = 'jump' | 'land' | 'branch' | 'stage' | 'merge' | 'destroy' | 'combo' | 'coin' | 'hit' | 'over';
 export type Player = { x: number; y: number; vy: number; grounded: boolean; health: number; invulnerable: number; facing: -1 | 1 };
 
 const EMPTY_INPUT: Input = { move: 0, jump: false, branch: false, merge: false };
@@ -36,7 +39,7 @@ function hash(seed: number, index: number): number {
   return (n ^ (n >>> 16)) >>> 0;
 }
 
-export function encounters(seed: number, chunk: number): Encounter[] {
+export function encounters(seed: number, chunk: number, settings = DEFAULTS.enemies): Encounter[] {
   if (chunk < 0) return [];
   if (chunk === 0) return [
     { id: '0:0', kind: 'patrol', x: 232, phase: 0, period: 3.6 },
@@ -44,31 +47,52 @@ export function encounters(seed: number, chunk: number): Encounter[] {
   ];
   const kinds: HazardKind[] = ['patrol', 'spinner', 'shooter', 'gate'];
   const count = Math.min(4, 2 + Math.floor(chunk / 6));
-  return Array.from({ length: count }, (_, i) => {
+  const result = Array.from({ length: count }, (_, i) => {
     const n = hash(seed, chunk * 11 + i);
+    const kind = chunk === 1 && i === 0 ? 'shooter' : kinds[n % kinds.length]!;
     return {
       id: `${chunk}:${i}`,
-      kind: chunk === 1 && i === 0 ? 'shooter' : kinds[n % kinds.length]!,
-      x: chunk * CHUNK + 65 + i * (CHUNK / count) + ((n >>> 4) % 35),
+      kind,
+      x: 0,
       phase: ((n >>> 12) % 628) / 100,
-      period: Math.max(1.35, 3.4 - chunk * 0.035) + ((n >>> 20) % 4) * 0.12,
+      period: (Math.max(1.35, 3.4 - chunk * 0.035) + ((n >>> 20) % 4) * 0.12) / (kind === 'shooter' ? settings.firingRate : 1),
     };
   });
+  const radius = (hazard: Encounter): number => 13 + (hazard.kind === 'patrol' ? settings.patrolRange : 0);
+  const gaps = (): number[] => result.slice(1).map((hazard, i) => radius(result[i]!) + radius(hazard) + 40);
+  const left = Math.max(64, radius(result[0]!) + 24);
+  while (result.length > 2 && left + Math.max(64, radius(result.at(-1)!) + 24) + gaps().reduce((a, b) => a + b, 0) > CHUNK) result.pop();
+  const spacing = gaps();
+  let spare = CHUNK - left - Math.max(64, radius(result.at(-1)!) + 24) - spacing.reduce((a, b) => a + b, 0);
+  const random = (offset: number): number => hash(seed, chunk * 101 + offset) / 0xffffffff;
+  const lead = Math.floor(random(71) * Math.min(80, spare)); spare -= lead;
+  spare -= Math.floor(random(72) * Math.min(80, spare));
+  const weights = spacing.map((_, i) => 0.15 + random(80 + i) ** 2 * 2);
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  result[0]!.x = chunk * CHUNK + left + lead;
+  let allocated = 0;
+  for (let i = 1; i < result.length; i++) {
+    const extra = i === result.length - 1 ? spare - allocated : Math.floor(spare * weights[i - 1]! / totalWeight);
+    allocated += extra;
+    result[i]!.x = result[i - 1]!.x + spacing[i - 1]! + extra;
+  }
+  return result;
 }
 
-export function hazardPose(hazard: Encounter, time: number): { x: number; y: number; angle: number; active: boolean } {
-  const phase = time * (Math.PI * 2 / hazard.period) + hazard.phase;
+export function hazardPose(hazard: Encounter, time: number, settings = DEFAULTS.enemies): { x: number; y: number; angle: number; active: boolean } {
+  const speed = hazard.kind === 'patrol' ? settings.patrolSpeed : hazard.kind === 'spinner' ? settings.spinSpeed : hazard.kind === 'gate' ? settings.gateSpeed : 1;
+  const phase = time * speed * (Math.PI * 2 / hazard.period) + hazard.phase;
   return {
-    x: hazard.x + (hazard.kind === 'patrol' ? Math.sin(phase) * 24 : 0),
-    y: hazard.kind === 'spinner' ? 17 + Math.sin(phase * 0.5) * 9 : 0,
+    x: hazard.x + (hazard.kind === 'patrol' ? Math.sin(phase) * settings.patrolRange : 0),
+    y: hazard.kind === 'spinner' ? settings.spinnerHeight + Math.sin(phase * 0.5) * settings.spinnerBob : 0,
     angle: phase,
     active: hazard.kind !== 'gate' || Math.sin(phase) > -0.35,
   };
 }
 
-export function shotPosition(shot: Shot, time: number): { x: number; y: number } | null {
+export function shotPosition(shot: Shot, time: number, life = DEFAULTS.enemies.shotLife): { x: number; y: number } | null {
   const age = time - shot.birth;
-  return age >= 0 && age < SHOT_LIFE ? { x: shot.x + shot.vx * age, y: shot.y + shot.vy * age } : null;
+  return age >= 0 && age < life ? { x: shot.x + shot.vx * age, y: shot.y + shot.vy * age } : null;
 }
 
 export function sweptHit(ax: number, ay: number, bx: number, by: number, halfWidth: number, halfHeight: number): boolean {
@@ -117,28 +141,51 @@ export class Simulation {
   private readonly shotBuckets = new Map<string, Set<Shot>>();
   private readonly branchShots = new Map<number, Set<Shot>>();
   private readonly coinBuckets = new Map<number, Set<Coin>>();
+  private readonly coinCells = new Map<string, Set<Coin>>();
+  coinPhysicsCount = 0;
+  coinPairChecks = 0;
   private readonly branchCoins = new Map<number, Set<Coin>>();
+  mergeCombo = 0;
+  private mergeWait = 0;
+  private comboFlourished = false;
+  private mergeBlocked = false;
+  private jumpFlight: { height: number; age: number; rise: number; holdWindow: number; released: boolean } | null = null;
 
-  constructor(seed = 0xf04c) {
+  constructor(seed = 0xf04c, public config: Tuning = structuredClone(DEFAULTS)) {
     this.seed = seed;
   }
 
   get top(): Branch { return this.branches[this.branches.length - 1]!; }
   get depth(): number { return this.branches.length - 1; }
   get distanceScore(): number { return Math.floor(Math.max(0, this.maxX - 64) / UNIT) * 5; }
+  get attackRange(): number { return this.config.enemies.shotLife * this.config.enemies.shotSpeed + 30; }
+  get lane(): number { return this.config.branches.height; }
+  get unit(): number { return this.config.branches.length; }
+  get transitionDuration(): number { return this.transition?.kind === 'merge' ? this.config.branches.collapseDuration : this.config.branches.liftDuration; }
+  pose(hazard: Encounter, time = this.time): ReturnType<typeof hazardPose> { return hazardPose(hazard, time, this.config.enemies); }
+  shotPose(shot: Shot): ReturnType<typeof shotPosition> { return shotPosition(shot, this.time, this.config.enemies.shotLife); }
   get score(): number { return this.coinScore + this.destructionScore + this.distanceScore; }
   get currentDepth(): number { return this.surfaceAt(this.depth, this.player.x).depth; }
   get playerWorldY(): number {
-    const shift = this.transition ? this.transition.offset * (1 - Math.min(1, this.transition.age / 0.34)) : 0;
-    return this.surfaceAt(this.depth, this.player.x).height + this.player.y + shift;
+    return this.surfaceAt(this.depth, this.player.x).height + this.player.y;
   }
 
-  surfaceAt(depth: number, x: number): { height: number; depth: number } {
+  private surfaceHeight(depth: number, x: number, parent: number, age: number): number {
+    const branch = this.branches[depth]!;
+    if (x < branch.forkX) return parent;
+    const full = branch.forkBase + (depth * this.lane - branch.forkBase) * Math.min(1, (x - branch.forkX) / this.unit);
+    if (!this.transition || depth !== this.depth) return full;
+    const t = Math.min(1, age / this.transitionDuration);
+    const lift = this.transition.kind === 'branch' ? 1 - (1 - t) ** this.config.branches.liftEase : 1 - t ** this.config.branches.collapseEase;
+    return parent + (full - parent) * lift;
+  }
+
+  surfaceAt(depth: number, x: number, age = this.transition?.age ?? 0): { height: number; depth: number } {
     for (let i = depth; i > 0; i--) {
       const branch = this.branches[i]!;
       if (x < branch.forkX) continue;
-      const t = Math.min(1, (x - branch.forkX) / UNIT);
-      return { height: branch.forkBase + (i * LANE - branch.forkBase) * t, depth: i };
+      const parent = this.transition && i === this.depth ? this.surfaceAt(i - 1, x, age).height : 0;
+      return { height: this.surfaceHeight(i, x, parent, age), depth: i };
     }
     return { height: 0, depth: 0 };
   }
@@ -148,11 +195,11 @@ export class Simulation {
     for (let c = Math.max(0, Math.floor(minX / CHUNK)); c <= Math.floor(maxX / CHUNK); c++) {
       let chunk = this.chunks.get(c);
       if (!chunk) {
-        chunk = encounters(this.seed, c);
+        chunk = encounters(this.seed, c, this.config.enemies);
         this.chunks.set(c, chunk);
         if (this.chunks.size > 24) this.chunks.delete(this.chunks.keys().next().value!);
       }
-      result.push(...chunk.filter(h => h.x >= minX - 24 && h.x <= maxX + 24));
+      result.push(...chunk.filter(h => h.x >= minX - this.config.enemies.patrolRange && h.x <= maxX + this.config.enemies.patrolRange));
     }
     return result;
   }
@@ -170,20 +217,29 @@ export class Simulation {
     this.paused = paused;
     this.direction = 0;
     this.held = { jump: false, branch: false, merge: false };
+    this.endMergeHold();
+  }
+
+  endMergeHold(): void { this.mergeCombo = 0; this.mergeWait = 0; this.comboFlourished = false; }
+
+  stagedLineages(): Map<string, number> {
+    const lineages = new Map<string, number>();
+    for (let depth = 1; depth <= this.depth; depth++) for (const id of this.branches[depth]!.staged) lineages.set(id, depth);
+    return lineages;
   }
 
   branch(): boolean {
     if (this.transition || this.gameOver || this.paused) return false;
-    const previousHeight = this.surfaceAt(this.depth, this.player.x).height;
-    const forkBase = this.surfaceAt(this.depth, this.player.x - UNIT).height;
+    this.endMergeHold();
+    const forkBase = this.surfaceAt(this.depth, this.player.x - this.unit).height;
     this.branches.push({
       id: this.nextBranch++,
-      forkX: this.player.x - UNIT,
+      forkX: this.player.x - this.unit,
       forkBase,
       staged: new Set(),
       converted: new Set(),
     });
-    this.transition = { kind: 'branch', age: 0, from: this.depth - 1, offset: previousHeight - this.surfaceAt(this.depth, this.player.x).height };
+    this.transition = { kind: 'branch', age: 0, from: this.depth - 1 };
     this.tutorial.branched = true;
     this.events.push('branch');
     this.bursts.push({ x: this.top.forkX, branchId: this.top.id, age: 0, kind: 'fork' });
@@ -200,40 +256,57 @@ export class Simulation {
 
   merge(): boolean {
     if (this.depth === 0 || this.transition || this.gameOver || this.paused) return false;
+    this.transition = { kind: 'merge', age: 0, from: this.depth };
+    return true;
+  }
+
+  private convertMergeTargets(): void {
     const child = this.top;
     const parent = this.branches[this.depth - 1]!;
-    const previousHeight = this.surfaceAt(this.depth, this.player.x).height;
     for (const id of child.staged) {
+      const chunkIndex = Number(id.split(':')[0]);
+      const target = encounters(this.seed, chunkIndex, this.config.enemies).find(h => h.id === id);
+      if (!target) throw new Error(`Unknown staged encounter: ${id}`);
+      const pose = this.pose(target);
+      const height = target.kind === 'gate' ? (pose.active ? 29 : 4) : target.kind === 'spinner' ? 11 : 17;
+      const impact = this.surfaceAt(this.depth - 1, pose.x).height + pose.y + height;
+      if (this.surfaceAt(this.depth, pose.x).height > impact) continue;
       if (!this.isConverted(this.depth - 1, id)) {
         parent.converted.add(id);
         this.firstConvertedDepth.set(id, Math.min(this.firstConvertedDepth.get(id) ?? Infinity, this.depth - 1));
-        const chunkIndex = Number(id.split(':')[0]);
-        const target = encounters(this.seed, chunkIndex).find(h => h.id === id);
-        if (!target) throw new Error(`Unknown staged encounter: ${id}`);
         const rewardId = `${parent.id}/${id}`;
         if (!this.awarded.has(rewardId)) {
           this.awarded.add(rewardId);
           this.destructionScore += 100;
           for (let i = 0; i < 3; i++) {
             const coinId = `${rewardId}/${i}`;
+            const launch = hash(this.seed, parent.id * 65537 + chunkIndex * 97 + Number(id.split(':')[1]) * 17 + i);
             const coin: Coin = {
-              id: coinId, branchId: parent.id, x: target.x + (i - 1) * 13,
-              offset: i * 0.09, bornAt: this.realTime, collected: false,
+              id: coinId, branchId: parent.id, x: pose.x + (i - 1) * 5, y: 17 + i * 2,
+              vx: (i - 1) * this.config.coins.spread + ((launch >>> 10) % 17) - 8,
+              vy: this.config.coins.popSpeed * (0.8 + (launch % 31) / 100), bornAt: this.realTime, collected: false,
             };
             this.coins.set(coinId, coin);
-            const key = Math.floor(coin.x / CHUNK);
-            const bucket = this.coinBuckets.get(key) ?? new Set<Coin>();
-            bucket.add(coin); this.coinBuckets.set(key, bucket);
+            this.placeCoin(coin, coin.x, coin.y);
             const owned = this.branchCoins.get(parent.id) ?? new Set<Coin>();
             owned.add(coin); this.branchCoins.set(parent.id, owned);
           }
-          this.bursts.push({ x: target.x, branchId: parent.id, age: 0, kind: 'merge' });
+          this.bursts.push({ x: pose.x, branchId: parent.id, age: 0, kind: 'merge' });
+          this.events.push('destroy');
         }
       }
       if (this.depth > 1) parent.staged.add(id);
     }
+  }
+
+  private completeMerge(): void {
+    const child = this.top;
+    const parent = this.branches[this.depth - 1]!;
     const parentCoins = this.branchCoins.get(parent.id) ?? new Set<Coin>();
-    for (const coin of this.branchCoins.get(child.id) ?? []) { coin.branchId = parent.id; parentCoins.add(coin); }
+    for (const coin of this.branchCoins.get(child.id) ?? []) {
+      this.placeCoin(coin, coin.x, coin.y, parent.id);
+      parentCoins.add(coin);
+    }
     if (parentCoins.size) this.branchCoins.set(parent.id, parentCoins);
     this.branchCoins.delete(child.id);
     for (const shot of this.branchShots.get(child.id) ?? []) {
@@ -246,15 +319,108 @@ export class Simulation {
     }
     this.branchShots.delete(child.id);
     this.branches.pop();
-    this.transition = { kind: 'merge', age: 0, from: this.depth + 1, offset: previousHeight - this.surfaceAt(this.depth, this.player.x).height };
     this.tutorial.merged = true;
     this.events.push('merge');
-    return true;
   }
 
   coinY(coin: Coin): number {
-    const t = Math.max(0, this.realTime - coin.bornAt - coin.offset);
-    return Math.max(5, 17 + 90 * t - 160 * t * t);
+    return coin.y;
+  }
+
+  private coinCell(coin: Coin): string { return `${coin.branchId}:${Math.floor(coin.x / 10)}`; }
+
+  private placeCoin(coin: Coin, x: number, y: number, branchId = coin.branchId): void {
+    const oldChunk = Math.floor(coin.x / CHUNK), oldCell = this.coinCell(coin);
+    this.coinBuckets.get(oldChunk)?.delete(coin);
+    this.coinCells.get(oldCell)?.delete(coin);
+    if (!this.coinBuckets.get(oldChunk)?.size) this.coinBuckets.delete(oldChunk);
+    if (!this.coinCells.get(oldCell)?.size) this.coinCells.delete(oldCell);
+    if (branchId !== coin.branchId) {
+      this.branchCoins.get(coin.branchId)?.delete(coin);
+      const owned = this.branchCoins.get(branchId) ?? new Set<Coin>();
+      owned.add(coin); this.branchCoins.set(branchId, owned);
+    }
+    coin.x = x; coin.y = y; coin.branchId = branchId;
+    const key = Math.floor(x / CHUNK), cell = this.coinCell(coin);
+    const bucket = this.coinBuckets.get(key) ?? new Set<Coin>(); bucket.add(coin); this.coinBuckets.set(key, bucket);
+    const neighbors = this.coinCells.get(cell) ?? new Set<Coin>(); neighbors.add(coin); this.coinCells.set(cell, neighbors);
+  }
+
+  private stepCoins(dt: number): void {
+    this.coinPhysicsCount = 0; this.coinPairChecks = 0;
+    if (!this.coins.size) return;
+    const depths = new Map(this.branches.map((branch, depth) => [branch.id, depth]));
+    const active = new Set<Coin>();
+    this.coinPairChecks = 0;
+    for (let chunk = Math.max(0, Math.floor(this.player.x / CHUNK) - 1); chunk <= Math.floor(this.player.x / CHUNK) + 1; chunk++) {
+      let scanned = 0;
+      for (const coin of this.coinBuckets.get(chunk) ?? []) {
+        active.add(coin);
+        if (++scanned >= 32) break;
+      }
+    }
+    this.coinPhysicsCount = active.size;
+    const settings = this.config.coins;
+    const ground = (coin: Coin, x = coin.x): number => this.surfaceAt(depths.get(coin.branchId)!, x).height;
+    const translate = (coin: Coin, dx: number, dy: number): void => {
+      const worldY = ground(coin) + coin.y;
+      const surface = this.surfaceAt(depths.get(coin.branchId)!, coin.x + dx);
+      this.placeCoin(coin, coin.x + dx, Math.max(5, worldY + dy - surface.height), this.branches[surface.depth]!.id);
+    };
+    const resting = (coin: Coin): boolean => coin.vx === 0 && coin.vy === 0 && coin.y === 5;
+    for (const coin of active) {
+      if (resting(coin)) {
+        const bucket = this.coinBuckets.get(Math.floor(coin.x / CHUNK))!;
+        bucket.delete(coin); bucket.add(coin);
+        continue;
+      }
+      const x = coin.x + coin.vx * dt;
+      let y = ground(coin) + coin.y + coin.vy * dt - settings.gravity * dt * dt / 2 - ground(coin, x);
+      coin.vy -= settings.gravity * dt;
+      if (y <= 5) {
+        y = 5;
+        const slope = ground(coin, x + .5) - ground(coin, x - .5);
+        const length = Math.hypot(slope, 1), nx = -slope / length, ny = 1 / length;
+        const velocity = coin.vx * nx + coin.vy * ny;
+        if (velocity < 0) { coin.vx -= (1 + settings.bounce) * velocity * nx; coin.vy -= (1 + settings.bounce) * velocity * ny; }
+        coin.vx *= settings.friction;
+        if (Math.abs(coin.vy) < 10) coin.vy = 0;
+        if (Math.abs(coin.vx) < 1) coin.vx = 0;
+      }
+      const support = this.surfaceAt(depths.get(coin.branchId)!, x);
+      this.placeCoin(coin, x, y, this.branches[support.depth]!.id);
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (const coin of active) {
+        const seen = new Set<Coin>();
+        let checked = 0;
+        const cell = Math.floor(coin.x / 10);
+        for (let c = cell - 1; c <= cell + 1 && checked < 16; c++) {
+          for (const other of this.coinCells.get(`${coin.branchId}:${c}`) ?? []) {
+            if (++checked > 16) break;
+            this.coinPairChecks++;
+            if (other === coin) continue;
+            if (Math.abs(other.x - coin.x) >= 8.2) continue;
+            if (active.has(other) && coin.id > other.id || seen.has(other)) continue;
+            seen.add(other);
+            let dx = other.x - coin.x, dy = ground(other) + other.y - ground(coin) - coin.y;
+            const distance = Math.hypot(dx, dy);
+            if (distance >= 8.2) continue;
+            if (distance < 1e-6) { dx = coin.id < other.id ? 1 : -1; dy = 0; }
+            const length = Math.hypot(dx, dy), nx = dx / length, ny = dy / length;
+            const separation = (8.2 - distance) / 2;
+            translate(coin, -nx * separation, -ny * separation);
+            translate(other, nx * separation, ny * separation);
+            const speed = (other.vx - coin.vx) * nx + (other.vy - coin.vy) * ny;
+            if (speed < 0) {
+              const impulse = -(1 + settings.bounce) * speed / 2;
+              coin.vx -= impulse * nx; coin.vy -= impulse * ny;
+              other.vx += impulse * nx; other.vy += impulse * ny;
+            }
+          }
+        }
+      }
+    }
   }
 
   coinsNear(minX: number, maxX: number): Coin[] {
@@ -268,7 +434,7 @@ export class Simulation {
   private hurt(): void {
     if (this.player.invulnerable > 0) return;
     this.player.health--;
-    this.player.invulnerable = 1.35;
+    this.player.invulnerable = this.config.physics.hitProtection;
     this.bursts.push({ x: this.player.x, branchId: this.branches[this.currentDepth]!.id, age: 0, kind: 'hit' });
     this.events.push('hit');
     if (this.player.health <= 0) {
@@ -279,8 +445,8 @@ export class Simulation {
   }
 
   private shotBucketKeys(shot: Shot): string[] {
-    const endX = shot.x + shot.vx * SHOT_LIFE;
-    const endY = shot.y + shot.vy * SHOT_LIFE;
+    const endX = shot.x + shot.vx * this.config.enemies.shotLife;
+    const endY = shot.y + shot.vy * this.config.enemies.shotLife;
     const keys: string[] = [];
     for (let x = Math.floor(Math.min(shot.x, endX) / 128); x <= Math.floor(Math.max(shot.x, endX) / 128); x++) {
       for (let y = Math.floor(Math.min(shot.y, endY) / 128); y <= Math.floor(Math.max(shot.y, endY) / 128); y++) keys.push(`${x}:${y}`);
@@ -300,7 +466,7 @@ export class Simulation {
 
   private ensureShots(hazard: Encounter, branch: Branch, ground: number, start: number, end: number): void {
     const phase = hazard.phase;
-    const first = Math.ceil((Math.min(start, end) - SHOT_LIFE - phase) / hazard.period);
+    const first = Math.ceil((Math.min(start, end) - this.config.enemies.shotLife - phase) / hazard.period);
     const last = Math.floor((Math.max(start, end) - phase) / hazard.period);
     for (let n = first; n <= last; n++) {
       const id = `${branch.id}/${hazard.id}/${n}`;
@@ -310,11 +476,11 @@ export class Simulation {
       const dx = this.player.x - x;
       const dy = this.playerWorldY + PLAYER_HEIGHT / 2 - y;
       const distance = Math.hypot(dx, dy);
-      if (distance > ATTACK_RANGE) continue;
+      if (distance > this.attackRange) continue;
       const shot: Shot = {
         id, branchId: branch.id, sourceId: hazard.id, birth: n * hazard.period + phase, x, y,
-        vx: distance > 0 ? dx / distance * SHOT_SPEED : -SHOT_SPEED,
-        vy: distance > 0 ? dy / distance * SHOT_SPEED : 0,
+        vx: distance > 0 ? dx / distance * this.config.enemies.shotSpeed : -this.config.enemies.shotSpeed,
+        vy: distance > 0 ? dy / distance * this.config.enemies.shotSpeed : 0,
       };
       this.shots.set(id, shot);
       const owned = this.branchShots.get(branch.id) ?? new Set<Shot>();
@@ -333,59 +499,74 @@ export class Simulation {
     if (!(dt > 0 && dt <= 1 / 30)) throw new Error('Simulation requires a positive fixed step of at most 1/30s');
     this.realTime += dt;
     const oldWorldY = this.playerWorldY;
+    const oldTransitionAge = this.transition?.age ?? 0;
     const wasGrounded = this.player.grounded;
     this.player.invulnerable = Math.max(0, this.player.invulnerable - dt);
     const jump = input.jump && !this.held.jump;
     const fork = input.branch && !this.held.branch;
-    const merge = input.merge && !this.held.merge;
+    if (!this.transition) this.mergeWait = Math.max(0, this.mergeWait - dt);
+    if (!input.merge) { this.endMergeHold(); this.mergeBlocked = false; }
+    if (fork && input.merge) { this.endMergeHold(); this.mergeBlocked = true; }
+    const merge = input.merge && !this.mergeBlocked && (!this.held.merge || this.mergeWait === 0);
     this.held = { jump: input.jump, branch: input.branch, merge: input.merge };
     if (fork) this.branch();
     else if (merge) this.merge();
     if (jump && this.player.grounded) {
-      this.player.vy = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT);
+      this.player.vy = Math.sqrt(2 * this.config.physics.gravity * this.config.physics.jumpHeight);
+      this.jumpFlight = {
+        height: this.config.physics.jumpHeight, age: 0, rise: 0,
+        holdWindow: this.player.vy / this.config.physics.gravity, released: false,
+      };
       this.player.grounded = false;
       this.events.push('jump');
       this.tutorial.jumped = true;
     }
+    if (this.jumpFlight && !input.jump && !this.jumpFlight.released) {
+      const flight = this.jumpFlight;
+      flight.released = true;
+      const held = Math.max(0, Math.min(1, (flight.age - dt) / Math.max(dt, flight.holdWindow - dt)));
+      const target = flight.height * (0.5 + 0.5 * held);
+      if (this.player.vy > 0) this.player.vy = Math.min(this.player.vy, Math.sqrt(2 * this.config.physics.gravity * Math.max(0, target - flight.rise)));
+    }
     if (this.transition) {
       this.transition.age += dt;
-      if (this.transition.age >= 0.34) this.transition = null;
+      if (this.transition.age + 1e-9 >= this.transitionDuration) this.transition.age = this.transitionDuration;
     }
 
     const oldX = this.player.x;
-    const oldGround = this.surfaceAt(this.depth, oldX).height;
     const oldTime = this.time;
-    let verticalPosition = oldGround + this.player.y;
+    const supportShift = this.transition ? this.surfaceAt(this.depth, oldX).height - this.surfaceAt(this.depth, oldX, oldTransitionAge).height : 0;
+    let verticalPosition = oldWorldY + supportShift;
     if (!this.player.grounded) {
-      verticalPosition += this.player.vy * dt - 0.5 * GRAVITY * dt * dt;
-      this.player.vy -= GRAVITY * dt;
+      const rise = this.player.vy * dt - 0.5 * this.config.physics.gravity * dt * dt;
+      verticalPosition += rise;
+      if (this.jumpFlight) { this.jumpFlight.rise += rise; this.jumpFlight.age += dt; }
+      this.player.vy -= this.config.physics.gravity * dt;
     }
     const move = Math.sign(input.move);
     this.axis = move;
     if (move !== 0) this.player.facing = move < 0 ? -1 : 1;
-    this.player.x = Math.max(PLAYER_WIDTH / 2, oldX + move * SPEED * dt);
+    this.player.x = Math.max(PLAYER_WIDTH / 2, oldX + move * this.config.character.speed * dt);
     let physicalDepth = this.currentDepth;
-    const hazards = this.nearby(oldX - ATTACK_RANGE - 30, oldX + ATTACK_RANGE + 30);
-    const grounds = new Map<number, Float64Array>();
-    const heightAt = (depth: number, x: number): number => {
-      let heights = grounds.get(x);
+    const hazards = this.nearby(oldX - this.attackRange - 60, oldX + this.attackRange + 60);
+    const grounds = [new Map<number, Float64Array>(), new Map<number, Float64Array>()];
+    const heightAt = (depth: number, x: number, previous = false): number => {
+      const cache = grounds[Number(previous)]!;
+      let heights = cache.get(x);
       if (!heights) {
         heights = new Float64Array(this.branches.length);
         for (let d = 1; d <= this.depth; d++) {
-          const branch = this.branches[d]!;
-          heights[d] = x < branch.forkX ? heights[d - 1]! :
-            branch.forkBase + (d * LANE - branch.forkBase) * Math.min(1, (x - branch.forkX) / UNIT);
+          heights[d] = this.surfaceHeight(d, x, heights[d - 1]!, previous ? oldTransitionAge : this.transition?.age ?? 0);
         }
-        grounds.set(x, heights);
+        cache.set(x, heights);
       }
       return heights[depth]!;
     };
-    const shift = this.transition ? this.transition.offset * (1 - this.transition.age / 0.34) : 0;
     const proposedGround = this.surfaceAt(this.depth, this.player.x).height;
-    const proposedFoot = (this.player.grounded ? proposedGround : Math.max(proposedGround, verticalPosition)) + shift;
+    const proposedFoot = this.player.grounded ? proposedGround : Math.max(proposedGround, verticalPosition);
     for (const hazard of hazards) {
       if (hazard.kind !== 'gate') continue;
-      const pose = hazardPose(hazard, oldTime);
+      const pose = this.pose(hazard, oldTime);
       if (!pose.active) continue;
       const left = pose.x - 26;
       const right = pose.x + 26;
@@ -396,7 +577,8 @@ export class Simulation {
       const foot = oldWorldY + (proposedFoot - oldWorldY) * ratio;
       for (let depth = 0; depth <= this.depth; depth++) {
         if (hazard.x < this.branches[depth]!.forkX || !this.isOrdinaryActive(depth, hazard)) continue;
-        const floor = heightAt(depth, hazard.x);
+        const beforeFloor = heightAt(depth, hazard.x, true);
+        const floor = beforeFloor + (heightAt(depth, hazard.x) - beforeFloor) * ratio;
         if (foot < floor + 29 && foot + PLAYER_HEIGHT > floor) {
           this.player.x = edge;
           break;
@@ -410,14 +592,17 @@ export class Simulation {
       this.player.y = verticalPosition - ground.height;
       if (this.player.y <= 0) {
         this.player.y = 0; this.player.vy = 0; this.player.grounded = true;
+        this.jumpFlight = null;
       }
     }
     if (!wasGrounded && this.player.grounded) this.events.push('land');
     const displacement = this.player.x - oldX;
-    this.time += displacement / SPEED;
+    this.time += displacement / this.config.character.speed;
     this.direction = Math.sign(displacement);
     this.maxX = Math.max(this.maxX, this.player.x);
     if (Math.abs(this.player.x - 64) > UNIT) this.tutorial.moved = true;
+    if (this.transition?.kind === 'merge') this.convertMergeTargets();
+    this.stepCoins(dt);
 
     for (const hazard of hazards) {
       if (hazard.x < this.branches[physicalDepth]!.forkX || this.isConverted(physicalDepth, hazard.id)) continue;
@@ -430,15 +615,15 @@ export class Simulation {
       }
     }
     for (const hazard of hazards) {
-      const before = hazardPose(hazard, oldTime);
-      const after = hazardPose(hazard, this.time);
+      const before = this.pose(hazard, oldTime);
+      const after = this.pose(hazard);
       if (!(before.active || after.active) || Math.min(before.x, after.x) > Math.max(oldX, this.player.x) + 26 ||
         Math.max(before.x, after.x) < Math.min(oldX, this.player.x) - 26) continue;
       const h = hazard.kind === 'gate' ? 29 : hazard.kind === 'spinner' ? 11 : 17;
       for (let depth = 0; depth <= this.depth; depth++) {
         if (hazard.x < this.branches[depth]!.forkX || !this.isOrdinaryActive(depth, hazard)) continue;
         if (sweptHit(
-          oldX - before.x, oldWorldY + PLAYER_HEIGHT / 2 - heightAt(depth, before.x) - before.y - h / 2,
+          oldX - before.x, oldWorldY + PLAYER_HEIGHT / 2 - heightAt(depth, before.x, true) - before.y - h / 2,
           this.player.x - after.x, this.playerWorldY + PLAYER_HEIGHT / 2 - heightAt(depth, after.x) - after.y - h / 2,
           hazard.kind === 'gate' ? 26 : 22, PLAYER_HEIGHT / 2 + h / 2,
         )) this.hurt();
@@ -450,7 +635,7 @@ export class Simulation {
       const branch = this.branches[depth]!;
       for (const hazard of hazards) {
         if (hazard.kind === 'shooter' && hazard.x >= branch.forkX && !this.isConverted(depth, hazard.id) &&
-          Math.abs(heightAt(depth, hazard.x) - this.playerWorldY) <= ATTACK_RANGE) {
+          Math.abs(heightAt(depth, hazard.x) - this.playerWorldY) <= this.attackRange) {
           this.ensureShots(hazard, branch, heightAt(depth, hazard.x), oldTime, this.time);
         }
       }
@@ -458,8 +643,8 @@ export class Simulation {
     const worldY = this.playerWorldY;
     for (const shot of this.shotsNear(Math.min(oldX, this.player.x) - PLAYER_WIDTH, Math.max(oldX, this.player.x) + PLAYER_WIDTH, Math.min(oldWorldY, worldY) - 12, Math.max(oldWorldY, worldY) + 30)) {
       const lo = Math.max(Math.min(oldTime, this.time), shot.birth);
-      const hi = Math.min(Math.max(oldTime, this.time), shot.birth + SHOT_LIFE);
-      if (lo > hi || (oldTime === this.time && !shotPosition(shot, this.time))) continue;
+      const hi = Math.min(Math.max(oldTime, this.time), shot.birth + this.config.enemies.shotLife);
+      if (lo > hi || (oldTime === this.time && !this.shotPose(shot))) continue;
       const startTime = this.direction < 0 ? hi : lo;
       const endTime = this.direction < 0 ? lo : hi;
       const span = this.time - oldTime;
@@ -481,6 +666,9 @@ export class Simulation {
         Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - this.surfaceAt(physicalDepth, coin.x).height - this.coinY(coin)) < 18 && this.realTime - coin.bornAt > 0.12 && !this.transition) {
         coin.collected = true;
         this.coins.delete(coin.id);
+        const cell = this.coinCell(coin);
+        this.coinCells.get(cell)?.delete(coin);
+        if (!this.coinCells.get(cell)?.size) this.coinCells.delete(cell);
         const key = Math.floor(coin.x / CHUNK);
         const bucket = this.coinBuckets.get(key);
         bucket?.delete(coin);
@@ -494,7 +682,21 @@ export class Simulation {
     }
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       this.bursts[i]!.age += dt;
-      if (this.bursts[i]!.age > 0.65) this.bursts.splice(i, 1);
+      if (this.bursts[i]!.age > Math.max(this.config.effects.particleLife, this.config.effects.shakeDuration)) this.bursts.splice(i, 1);
+    }
+    if (!this.gameOver && this.transition?.age === this.transitionDuration) {
+      if (this.transition.kind === 'merge') {
+        this.completeMerge();
+        this.mergeWait = this.config.branches.holdDelay;
+        if (input.merge && !this.mergeBlocked) {
+          this.mergeCombo++;
+          if (!this.comboFlourished && this.mergeCombo === this.config.audio.successThreshold) {
+            this.comboFlourished = true;
+            this.events.push('combo');
+          }
+        }
+      }
+      this.transition = null;
     }
   }
 }

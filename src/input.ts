@@ -9,34 +9,51 @@ const bindings: Record<string, Action> = {
 export class Controls {
   private keys = new Set<string>();
   private pointers = new Map<number, Action>();
+  private buttonKeys = new Map<string, Action>();
   private edges = new Set<Action>();
   private abort = new AbortController();
 
   constructor(private readonly onPause: () => void, private readonly onGesture: () => void) {
     const options = { signal: this.abort.signal };
+    const ownsInput = (target: EventTarget | null): boolean => target instanceof HTMLElement &&
+      Boolean(target.closest('#tuning-panel, button, input, textarea, select, summary, a, [contenteditable="true"]'));
     window.addEventListener('keydown', e => {
+      if (e.target instanceof HTMLElement && e.target.closest('#tuning-panel')) return;
       if (e.code === 'Escape' && !e.repeat) { this.onPause(); return; }
-      if (!bindings[e.code] || (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))) return;
+      if (ownsInput(e.target)) return;
+      if (!bindings[e.code]) return;
       e.preventDefault();
       if (e.repeat && !this.keys.has(e.code)) return;
       if (!e.repeat) this.edges.add(bindings[e.code]!);
       this.keys.add(e.code);
+      this.paintPressed();
       this.onGesture();
     }, options);
-    window.addEventListener('keyup', e => { this.keys.delete(e.code); }, options);
+    document.addEventListener('focusin', e => { if (ownsInput(e.target)) this.clear(); }, options);
+    document.addEventListener('pointerdown', e => {
+      if (e.target instanceof HTMLElement && !e.target.closest('input, textarea, [contenteditable="true"]')) window.getSelection()?.removeAllRanges();
+    }, options);
+    window.addEventListener('keyup', e => { this.keys.delete(e.code); this.buttonKeys.delete(e.code); this.paintPressed(); }, options);
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-control]')) {
       const action = button.dataset.control as Action;
+      button.addEventListener('keydown', e => {
+        if (e.code !== 'Space' && e.code !== 'Enter') return;
+        e.preventDefault();
+        if (!e.repeat) { this.edges.add(action); this.buttonKeys.set(e.code, action); }
+        this.paintPressed(); this.onGesture();
+      }, options);
       button.addEventListener('pointerdown', e => {
         e.preventDefault();
         button.setPointerCapture(e.pointerId);
         this.pointers.set(e.pointerId, action);
         this.edges.add(action);
-        button.classList.add('pressed');
+        this.paintPressed();
         this.onGesture();
       }, options);
       const release = (e: PointerEvent): void => {
         this.pointers.delete(e.pointerId);
-        if (![...this.pointers.values()].includes(action)) button.classList.remove('pressed');
+        if (e.type === 'pointercancel') this.edges.delete(action);
+        this.paintPressed();
       };
       button.addEventListener('pointerup', release, options);
       button.addEventListener('pointercancel', release, options);
@@ -48,6 +65,7 @@ export class Controls {
   sample(): Input {
     const active = new Set([...this.keys].map(k => bindings[k]));
     for (const action of this.pointers.values()) active.add(action);
+    for (const action of this.buttonKeys.values()) active.add(action);
     const input = {
       move: Number(active.has('right')) - Number(active.has('left')),
       jump: active.has('jump') || this.edges.has('jump'),
@@ -59,8 +77,17 @@ export class Controls {
   }
 
   clear(): void {
-    this.keys.clear(); this.pointers.clear(); this.edges.clear();
-    document.querySelectorAll('.pressed').forEach(button => button.classList.remove('pressed'));
+    this.keys.clear(); this.pointers.clear(); this.buttonKeys.clear(); this.edges.clear();
+    this.paintPressed();
+  }
+
+  private paintPressed(): void {
+    const active = new Set([...this.keys].map(key => bindings[key]));
+    for (const action of this.pointers.values()) active.add(action);
+    for (const action of this.buttonKeys.values()) active.add(action);
+    for (const key of document.querySelectorAll<HTMLElement>('[data-control], [data-keycap]')) {
+      key.classList.toggle('pressed', active.has((key.dataset.control ?? key.dataset.keycap) as Action));
+    }
   }
 
   destroy(): void { this.clear(); this.abort.abort(); }

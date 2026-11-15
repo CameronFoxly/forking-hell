@@ -147,6 +147,8 @@ describe('branch and permanent transaction loop', () => {
     const game = new Simulation();
     game.branch(); settle(game);
     game.stage('0:0'); game.merge();
+    expect(game.coins.size).toBe(0);
+    settle(game);
     const coin = [...game.coins.values()][0]!;
     run(game, 1);
     expect(game.coinY(coin)).toBe(5);
@@ -252,6 +254,8 @@ describe('reversible hazards and stable projectile identities', () => {
     expect(game.player.health).toBe(3);
     run(game, 0.2);
     expect(game.transition).not.toBeNull();
+    expect(game.player.health).toBe(3);
+    game.step();
     expect(game.player.health).toBe(2);
   });
 
@@ -264,7 +268,7 @@ describe('reversible hazards and stable projectile identities', () => {
     game.player.x = gate.x - 26;
     const time = game.time;
     game.branch();
-    run(game, 0.1, { move: 1 });
+    run(game, 0.05, { move: 1 });
     expect(game.transition).not.toBeNull();
     expect(game.player.x).toBe(gate.x - 26);
     expect(game.time).toBe(time);
@@ -337,6 +341,9 @@ describe('reversible hazards and stable projectile identities', () => {
     for (let i = 0; i < depth; i++) { game.merge(); settle(game); }
     expect(game.depth).toBe(0);
     expect(game.destructionScore).toBe(depth * 100);
+    expect(game.coins.size + game.coinScore / 25).toBe(depth * 3);
+    expect(game.coinPhysicsCount).toBeLessThanOrEqual(96);
+    expect(game.coinPairChecks).toBeLessThanOrEqual(96 * 32);
   });
 
   it('rejects a negative engine timestep', () => {

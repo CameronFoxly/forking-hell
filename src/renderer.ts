@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
-import { COLORS as C, HEIGHT, text, WIDTH } from './pixel';
-import { hazardPose, LANE, shotPosition, UNIT } from './simulation';
+import { COLORS as C, text, WIDTH } from './pixel';
 import type { Simulation } from './simulation';
 import type { CharacterFrame, Clip } from './character';
 import { CameraRig } from './camera';
+import { MotionFringes } from './motion-fringes';
+import { connectorFringe, platformFringe } from './motion-geometry';
 
-export type ViewState = { started: boolean; reducedMotion: boolean; best: number; touch: boolean; delta: number };
+export type ViewState = { started: boolean; reducedMotion: boolean; best: number; touch: boolean; delta: number; effectDelta?: number };
 const floorY = 184;
+const WORLD_WIDTH = 1008, WORLD_HEIGHT = 572;
 
 export class WorldRenderer {
   private g: Phaser.GameObjects.Graphics;
@@ -14,18 +16,44 @@ export class WorldRenderer {
   private cat: Phaser.GameObjects.Sprite;
   private enemies: Phaser.GameObjects.Image[] = [];
   private usedEnemies = 0;
+  readonly composition: Phaser.GameObjects.RenderTexture;
+  readonly presentation: Phaser.GameObjects.RenderTexture;
+  sourceLeft = 0;
+  sourceTop = 0;
+  private outputScale = 1;
+  private density = 1;
+  readonly motion: MotionFringes;
+  private burstIds = new WeakMap<object, number>();
+  private nextBurstId = 0;
   cameraX = 0;
   renderedHazards = 0;
   renderedShots = 0;
+  highlightedCopies = 0;
   readonly camera = new CameraRig();
   private previousGame: Simulation | null = null;
   animation: { clip: Clip; index: number; facing: number } = { clip: 'Idle', index: 0, facing: 1 };
   get pixelScales(): number[] { return [this.cat.scaleX, ...this.enemies.slice(0, this.usedEnemies).map(enemy => enemy.scaleX)]; }
 
   constructor(private readonly scene: Phaser.Scene) {
-    this.g = scene.add.graphics();
-    this.cat = scene.add.sprite(64, floorY, 'octocat').setOrigin(0.5, 1).setDepth(2);
+    this.motion = new MotionFringes(scene);
+    this.g = new Phaser.GameObjects.Graphics(scene);
+    this.cat = new Phaser.GameObjects.Sprite(scene, 64, floorY, 'octocat').setOrigin(0.5, 1);
+    scene.cameras.main.setRoundPixels(false);
+    this.composition = new Phaser.GameObjects.RenderTexture(scene, 0, 0, WORLD_WIDTH, WORLD_HEIGHT).setOrigin(0).setVertexRoundMode('off');
+    this.composition.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    this.presentation = scene.add.renderTexture(0, 0, WORLD_WIDTH, WORLD_HEIGHT).setOrigin(0).setVertexRoundMode('off');
+    this.presentation.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.hud = scene.add.graphics().setDepth(3);
+    scene.events.once('shutdown', () => {
+      this.g.destroy(); this.cat.destroy(); this.composition.destroy();
+      this.motion.destroy();
+      for (const enemy of this.enemies) enemy.destroy();
+    });
+  }
+
+  resize(scale: number, density = 1): void {
+    if (scale !== this.outputScale || density !== this.density) this.motion.reset();
+    this.outputScale = scale; this.density = density; this.hud.setScale(scale);
   }
 
   private ring(x: number, y: number, color: number, radius = 4): void {
@@ -37,14 +65,37 @@ export class WorldRenderer {
   draw(game: Simulation, view: ViewState, frame: CharacterFrame, clip: Clip, index: number): void {
     let g = this.g.clear();
     this.usedEnemies = 0;
-    if (game !== this.previousGame) { this.camera.reset(); this.previousGame = game; }
+    if (game !== this.previousGame) { this.camera.reset(game.config.camera); this.motion.reset(); this.previousGame = game; }
     this.camera.update(game.paused || game.gameOver ? 0 : view.delta, {
       x: game.player.x, ground: game.playerWorldY - game.player.y,
       axis: game.axis, depth: game.depth, physicalDepth: game.currentDepth,
-    });
+    }, game.config.camera);
+    const effects = game.config.effects;
+    const LANE = game.lane, UNIT = game.unit;
+    const minimumZoom = Math.min(this.camera.zoom, game.config.camera.minZoom);
+    const width = Math.ceil((480 / minimumZoom + 8) / 2) * 2;
+    const height = Math.ceil((270 / minimumZoom + 8) / 2) * 2;
+    if (width > this.composition.width || height > this.composition.height) {
+      this.composition.resize(width, height);
+      this.presentation.resize(width, height);
+    }
+    const worldWidth = this.composition.width, worldHeight = this.composition.height;
     const hit = game.bursts.find(b => b.kind === 'hit');
-    const shake = !view.reducedMotion && hit && hit.age < 0.2 ? Math.round(Math.sin(hit.age * 120) * 2) : 0;
+    const shake = !view.reducedMotion && hit && hit.age < effects.shakeDuration ? Math.round(Math.sin(hit.age * effects.shakeFrequency) * effects.shakeAmount) : 0;
     this.cameraX = Math.floor(this.camera.left);
+    this.sourceLeft = this.cameraX - 4;
+    this.sourceTop = Math.ceil(this.camera.top) + 4;
+    this.motion.begin({
+      seconds: view.effectDelta ?? view.delta, zoom: this.camera.zoom, cssWorldPixel: this.camera.zoom * this.outputScale / this.density,
+      mobile: view.touch || this.scene.game.canvas.width / this.density < 700,
+      active: view.started && !game.paused && !game.gameOver && !view.reducedMotion,
+      viewport: `${this.scene.game.canvas.width}:${this.scene.game.canvas.height}:${this.density}`, poseTime: game.realTime,
+    }, game.config.motion, this.sourceLeft, this.sourceTop);
+    this.composition.camera.setScroll(this.sourceLeft, -this.sourceTop);
+    this.presentation.setScale(this.camera.zoom * this.outputScale).setPosition(
+      Math.round(this.camera.originX * this.outputScale) + (this.sourceLeft + shake) * this.camera.zoom * this.outputScale,
+      Math.round(this.camera.originY * this.outputScale) - this.sourceTop * this.camera.zoom * this.outputScale,
+    );
     const right = Math.ceil(this.camera.right);
     const screenY = (worldY: number): number => -Math.round(worldY);
     const screenX = (x: number): number => Math.round(x);
@@ -52,78 +103,136 @@ export class WorldRenderer {
     const highest = Math.min(game.depth, Math.ceil((this.camera.top + 45) / LANE));
     const depths = new Set<number>([game.currentDepth]);
     for (let depth = lowest; depth <= highest; depth++) depths.add(depth);
-    g.fillStyle(C.ink).fillRect(0, 0, WIDTH, HEIGHT);
-    for (let x = -((Math.floor(this.cameraX / 3)) % 48); x < WIDTH; x += 48) {
-      for (let y = 18; y < HEIGHT; y += 32) g.fillStyle(C.shadow).fillRect(x, y, 1, 1);
+    g.fillStyle(C.ink).fillRect(this.sourceLeft, -this.sourceTop, worldWidth, worldHeight);
+    for (let x = Math.floor(this.sourceLeft / 48) * 48; x < this.sourceLeft + worldWidth; x += 48) {
+      for (let y = Math.floor(-this.sourceTop / 32) * 32; y < -this.sourceTop + worldHeight; y += 32) g.fillStyle(C.deep).fillRect(x, y, 1, 1);
     }
     for (let i = 0; i < 8; i++) {
-      const x = ((i * 97 - Math.floor(this.cameraX / 8)) % 580 + 580) % 580 - 50;
-      const y = 110 + ((i * 31) % 90);
+      const x = this.sourceLeft + ((i * 157 - Math.floor(this.cameraX / 8)) % worldWidth + worldWidth) % worldWidth;
+      const y = -this.sourceTop + 180 + ((i * 51) % 150);
       g.lineStyle(1, C.deep).lineBetween(x, y, x + 45, y).lineBetween(x + 45, y, x + 65, y - 20);
       g.fillStyle(C.shadow).fillRect(x + 64, y - 21, 3, 3);
     }
 
-    g.save().translateCanvas(this.camera.originX + shake, this.camera.originY).scaleCanvas(this.camera.zoom, this.camera.zoom);
     const hazards = game.nearby(this.cameraX - 45, right + 45);
+    const staged = game.stagedLineages();
     this.renderedHazards = 0;
+    this.highlightedCopies = 0;
     for (const depth of [...depths].sort((a, b) => a - b)) {
       const branch = game.branches[depth]!;
       const active = depth === game.currentDepth;
-      const y = screenY(depth * LANE);
       const color = active ? C.cyan : C.muted;
       const start = Math.max(this.cameraX - 10, screenX(branch.forkX + (depth > 0 ? UNIT : 0)));
       if (depth > 0) {
         const x = screenX(branch.forkX);
-        const baseY = screenY(branch.forkBase);
-        for (let px = Math.max(x, this.cameraX - 1); px <= Math.min(x + UNIT, right + 1); px++) {
-          const top = Math.round(baseY + (y - baseY) * ((px - x) / UNIT));
-          const next = Math.round(baseY + (y - baseY) * ((px + 1 - x) / UNIT));
+        const baseY = screenY(game.surfaceAt(depth, branch.forkX).height);
+        for (let px = Math.max(x, this.cameraX - 1); px < Math.min(x + UNIT, right + 1); px++) {
+          const top = screenY(game.surfaceAt(depth, px).height);
+          const next = screenY(game.surfaceAt(depth, px + 1).height);
           g.fillStyle(C.shadow).fillRect(px, Math.min(top, next), 1, Math.abs(top - next) + 7);
-          g.fillStyle(C.cyan).fillRect(px, Math.min(top, next), 2, Math.abs(top - next) + 2);
+          g.fillStyle(C.cyan).fillRect(px, Math.min(top, next), 1, Math.abs(top - next) + 2);
         }
-        this.ring(x, baseY, C.cyan, 3);
+        // A two-row bright band is centered one pixel below its support edge.
+        this.ring(x, baseY + 1, C.cyan, 3);
+        connectorFringe(this.motion, branch.id, {
+          ax: branch.forkX, ay: game.surfaceAt(depth, branch.forkX).height,
+          bx: branch.forkX + UNIT, by: game.surfaceAt(depth, branch.forkX + UNIT).height, color: C.cyan,
+        });
       }
+      const origin = Math.max(0, branch.forkX + (depth ? UNIT : 0));
+      const cuts = new Set([origin, Infinity]);
       const nextFork = game.branches[depth + 1];
-      const segments = nextFork ? [[start, Math.min(right + 10, nextFork.forkX)], [Math.max(start, nextFork.forkX + UNIT), right + 10]] : [[start, right + 10]];
-      for (const [a, b] of segments) if (a !== undefined && b !== undefined && b > a) {
+      if (nextFork && nextFork.forkX > origin) cuts.add(nextFork.forkX);
+      if (game.transition && depth === game.depth) for (const parent of game.branches.slice(1, depth)) {
+        if (parent.forkX > origin) cuts.add(parent.forkX);
+        if (parent.forkX + UNIT > origin) cuts.add(parent.forkX + UNIT);
+      }
+      const boundaries = [...cuts].sort((a, b) => a - b);
+      for (let i = 0; i < boundaries.length - 1; i++) {
+        const anchor = boundaries[i]!, end = boundaries[i + 1]!;
+        const a = Math.max(start, anchor), b = Math.min(right + 10, end);
+        if (b <= a) continue;
         const pathColor = game.surfaceAt(game.depth, (a + b) / 2).depth === depth ? C.cyan : C.muted;
-        g.fillStyle(C.shadow).fillRect(a, y + 2, b - a, 5);
-        g.fillStyle(pathColor).fillRect(a, y, b - a, 2);
+        const ay = game.surfaceAt(depth, a).height, by = game.surfaceAt(depth, b).height;
+        if (Math.abs(ay - by) < 1e-9) {
+          const y = screenY(ay);
+          g.fillStyle(C.shadow).fillRect(Math.round(a), y + 2, Math.round(b) - Math.round(a), 5);
+          g.fillStyle(pathColor).fillRect(Math.round(a), y, Math.round(b) - Math.round(a), 2);
+          platformFringe(this.motion, `${branch.id}:${anchor}`, {
+            left: Math.round(a), right: Math.round(b), anchorX: anchor, supportY: ay, color: pathColor,
+          });
+        } else {
+          for (let px = Math.round(a); px < Math.round(b); px++) {
+            const y = screenY(game.surfaceAt(depth, px).height), next = screenY(game.surfaceAt(depth, px + 1).height);
+            g.fillStyle(C.shadow).fillRect(px, Math.min(y, next), 1, Math.abs(next - y) + 7);
+            g.fillStyle(pathColor).fillRect(px, Math.min(y, next), 1, Math.abs(next - y) + 2);
+          }
+          connectorFringe(this.motion, `platform:${branch.id}:${anchor}`, {
+            ax: anchor, ay: game.surfaceAt(depth, anchor).height,
+            bx: end, by: game.surfaceAt(depth, end).height, color: pathColor,
+          });
+        }
       }
       for (let x = Math.ceil(start / 48) * 48; x < right; x += 48) {
-        if (nextFork && x >= nextFork.forkX && x < nextFork.forkX + UNIT) continue;
+        const y = screenY(game.surfaceAt(depth, x).height);
         g.fillStyle(C.ink).fillRect(screenX(x) - 2, y - 1, 5, 4);
         g.fillStyle(color).fillRect(screenX(x) - 1, y, 3, 2);
         g.fillStyle(C.shadow).fillRect(screenX(x), y + 9, 1, 5);
       }
       for (const hazard of hazards) {
         if (hazard.x < branch.forkX || game.isConverted(depth, hazard.id)) continue;
-        const pose = hazardPose(hazard, game.time);
-        const y = screenY(game.surfaceAt(depth, pose.x).height);
+        const pose = game.pose(hazard);
+        const stagedDepth = staged.get(hazard.id);
+        const activated = stagedDepth !== undefined && depth <= stagedDepth;
         this.renderedHazards++;
         if (game.isOrdinaryActive(depth, hazard)) {
-          const frame = hazard.kind === 'patrol' ? `patrol-${Math.sin(pose.angle) > 0 ? 1 : 0}` :
+          const normalFrame = hazard.kind === 'patrol' ? `patrol-${Math.sin(pose.angle) > 0 ? 1 : 0}` :
             hazard.kind === 'spinner' ? `spinner-${((Math.floor(pose.angle / (Math.PI / 8)) % 16) + 16) % 16}` :
             hazard.kind === 'gate' ? (pose.active ? 'gate-up' : 'gate-down') : 'shooter';
+          const frame = `${activated ? 'activated-' : ''}${normalFrame}`;
           let enemy = this.enemies[this.usedEnemies];
           if (!enemy) {
-            enemy = this.scene.add.image(0, 0, 'hazards', frame).setOrigin(0.5, 1).setDepth(1);
+            enemy = new Phaser.GameObjects.Image(this.scene, 0, 0, 'hazards', frame).setOrigin(0.5, 1);
             this.enemies.push(enemy);
           }
           this.usedEnemies++;
           const worldY = game.surfaceAt(depth, pose.x).height + pose.y - (hazard.kind === 'spinner' ? 8 : 0);
-          enemy.setFrame(frame).setScale(this.camera.zoom).setPosition(this.camera.x(pose.x) + shake, this.camera.y(worldY)).setVisible(true).setAlpha(active ? 1 : 0.7);
+          enemy.setFrame(frame).setPosition(screenX(pose.x), screenY(worldY)).setVisible(true).setAlpha(active ? 1 : effects.inactiveOpacity);
+          this.motion.sprite(`enemy:${branch.id}:${hazard.id}`, enemy, pose.x, worldY);
+        }
+        if (activated) {
+          this.highlightedCopies++;
+          const switchOnly = depth === game.depth && hazard.kind !== 'shooter';
+          const sx = screenX(switchOnly ? hazard.x : pose.x);
+          const y = screenY(game.surfaceAt(depth, switchOnly ? hazard.x : pose.x).height), sy = y - 15;
+          const pulse = view.reducedMotion ? 1 : .75 + .25 * Math.sin(game.realTime * 5);
+          const alpha = effects.highlightStrength * pulse;
+          g.fillStyle(C.cyan, alpha * .2).fillRect(sx - 16, y - 30, 32, 32);
+          g.fillStyle(C.cyan, alpha).fillRect(sx - 17, y - 31, 5, 2).fillRect(sx + 12, y - 31, 5, 2)
+            .fillRect(sx - 17, y + 1, 5, 2).fillRect(sx + 12, y + 1, 5, 2);
+          if (depth > 0) {
+            const lower = screenY(game.surfaceAt(depth - 1, pose.x).height) - 15;
+            for (let py = sy; py < lower; py++) {
+              const px = Math.round(sx + (pose.x - sx) * (py - sy) / (lower - sy));
+              g.fillStyle(C.cyan, alpha * .2).fillRect(px - 2, py, 5, 1);
+              if ((py - sy) % 6 < 3) g.fillStyle(C.cyan, alpha).fillRect(px, py, 1, 1);
+            }
+          }
         }
         if (depth === game.depth && depth > 0) {
           const sx = screenX(hazard.x);
-          const sy = y - (hazard.kind === 'shooter' ? 43 : 15);
+          const sy = screenY(game.surfaceAt(depth, hazard.x).height) - (hazard.kind === 'shooter' ? 43 : 15);
           const staged = branch.staged.has(hazard.id);
           if (staged) {
-            for (let lineY = sy + 7; lineY < y + LANE - 15; lineY += 7) g.fillStyle(C.muted).fillRect(sx, lineY, 1, 3);
-            const pulse = ((game.time * 22) % LANE + LANE) % LANE;
-            g.fillStyle(C.cyan).fillRect(sx - 1, sy + Math.round(pulse), 3, 3);
+            const length = Math.max(0, screenY(game.surfaceAt(depth - 1, hazard.x).height) - 15 - sy - 7);
+            for (let lineY = sy + 7; lineY < sy + 7 + length; lineY += 7) g.fillStyle(C.muted).fillRect(sx, lineY, 1, 3);
+            if (length > 0) {
+              const pulse = ((game.time * 22) % length + length) % length;
+              g.fillStyle(C.cyan).fillRect(sx - 1, sy + 7 + Math.round(pulse), 3, 3);
+            }
           }
           this.ring(sx, sy, staged ? C.cyan : C.gold, 5);
+          this.motion.rect(`switch:${branch.id}:${hazard.id}`, hazard.x, game.surfaceAt(depth, hazard.x).height + (hazard.kind === 'shooter' ? 43 : 15), 10, 10, staged ? C.cyan : C.gold);
           if (staged) g.fillStyle(C.cyan).fillRect(sx - 2, sy - 2, 4, 4);
           else g.fillStyle(C.ink).fillRect(sx - 2, sy - 2, 4, 4);
         }
@@ -139,10 +248,15 @@ export class WorldRenderer {
       const y = screenY(game.surfaceAt(depth, coin.x).height + game.coinY(coin));
       g.fillStyle(C.gold).fillRect(x - 3, y - 4, 6, 8).fillRect(x - 4, y - 2, 8, 4);
       g.fillStyle(C.ink).fillRect(x, y - 2, 1, 4);
+      if (Math.abs(coin.vx) < 2 && coin.vy === 0) {
+        const shimmer = view.reducedMotion ? .15 : Math.max(0, Math.sin(game.realTime * 3 + coin.bornAt * 7)) ** 8;
+        g.fillStyle(C.white, shimmer * game.config.coins.shimmer).fillRect(x - 2, y - 3, 1, 3);
+      }
+      this.motion.rect(`coin:${coin.id}`, coin.x, game.surfaceAt(depth, coin.x).height + game.coinY(coin), 8, 8, C.gold);
     }
     this.renderedShots = 0;
     for (const shot of game.shotsNear(this.cameraX - 10, right + 10, this.camera.bottom - 10, this.camera.top + 10)) {
-      const pos = shotPosition(shot, game.time);
+      const pos = game.shotPose(shot);
       if (!pos) continue;
       const x = screenX(pos.x), y = screenY(pos.y);
       if (x < this.cameraX - 6 || x > right + 6 || pos.y < this.camera.bottom - 6 || pos.y > this.camera.top + 6) continue;
@@ -150,24 +264,34 @@ export class WorldRenderer {
       g.fillStyle(C.danger).fillRect(x - 2, y - 2, 5, 5);
       g.fillStyle(C.gold).fillRect(x, y, 1, 1);
       g.fillStyle(C.muted).fillRect(Math.round(x - shot.vx * 0.04), Math.round(y + shot.vy * 0.04), 2, 2);
+      this.motion.rect(`shot:${shot.id}`, pos.x, pos.y, 5, 5, C.danger);
     }
     for (const burst of game.bursts) {
       const depth = visibleBranches.get(burst.branchId);
       if (depth === undefined) continue;
       const x = screenX(burst.x), y = screenY(game.surfaceAt(depth, burst.x).height + 12);
       const color = burst.kind === 'hit' ? C.danger : burst.kind === 'coin' ? C.gold : C.cyan;
-      for (let i = 0; i < 9; i++) {
+      if (burst.age > effects.particleLife) continue;
+      if (!this.burstIds.has(burst)) this.burstIds.set(burst, this.nextBurstId++);
+      for (let i = 0; i < effects.particles; i++) {
         const angle = i * 2.399;
-        const radius = burst.age * (25 + i * 4);
+        const radius = burst.age * (25 + i * 4) * effects.particleSpread * (view.reducedMotion ? .35 : 1);
         g.fillStyle(color).fillRect(Math.round(x + Math.cos(angle) * radius), Math.round(y + Math.sin(angle) * radius + burst.age * burst.age * 50), 2, 2);
+        this.motion.rect(`burst:${this.burstIds.get(burst)}:${i}`, burst.x + Math.cos(angle) * radius + 1,
+          game.surfaceAt(depth, burst.x).height + 11 - Math.sin(angle) * radius - burst.age * burst.age * 50, 2, 2, color);
       }
     }
-    g.restore();
     for (let i = this.usedEnemies; i < this.enemies.length; i++) this.enemies[i]!.setVisible(false);
     g = this.hud.clear();
     this.animation = { clip, index, facing: game.player.facing };
-    this.cat.setFrame(frame.key).setScale(this.camera.zoom).setPosition(this.camera.x(game.player.x) + shake, this.camera.y(game.playerWorldY)).setFlipX(game.player.facing < 0);
+    this.cat.setFrame(frame.key).setPosition(screenX(game.player.x), screenY(game.playerWorldY)).setFlipX(game.player.facing < 0);
     this.cat.setVisible(view.reducedMotion || game.player.invulnerable <= 0 || Math.floor(game.realTime * 8) % 2 === 0);
+    this.motion.sprite('player', this.cat, game.player.x, game.playerWorldY);
+    this.composition.clear().draw([this.g, ...this.enemies.slice(0, this.usedEnemies), ...(this.cat.visible ? [this.cat] : [])]);
+    this.composition.render();
+    this.presentation.clear().draw(this.composition);
+    this.motion.draw(this.presentation);
+    this.presentation.render();
     if (view.started) {
       for (const depth of depths) {
         const y = Math.round(this.camera.y(depth * LANE)) + 10;

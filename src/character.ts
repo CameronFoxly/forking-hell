@@ -1,3 +1,6 @@
+import { DEFAULTS } from './tuning';
+import type { Tuning } from './tuning';
+
 export type Clip = 'Idle' | 'Walk' | 'Jump_Up' | 'JumpDown' | 'Land';
 export type CharacterFrame = { key: string; x: number; y: number; w: number; h: number; duration: number };
 export type CharacterAtlas = Record<Clip, CharacterFrame[]>;
@@ -48,11 +51,11 @@ export class CharacterAnimation {
   private firstDraw = false;
   private landing: number | null = null;
 
-  constructor(readonly atlas: CharacterAtlas) {}
+  constructor(readonly atlas: CharacterAtlas, public settings: Tuning['character'] = DEFAULTS.character) {}
   get frame(): CharacterFrame { return this.atlas[this.clip][this.index]!; }
   reset(): void { this.clip = 'Idle'; this.index = 0; this.elapsed = 0; this.firstDraw = false; this.landing = null; }
   jumped(): void { this.enter('Jump_Up', true); this.firstDraw = true; this.landing = null; }
-  landed(): void { this.enter('Land', true); this.firstDraw = true; this.landing = 1000 / 15; }
+  landed(): void { this.enter('Land', true); this.firstDraw = true; this.landing = this.settings.landMs; }
 
   update(seconds: number, grounded: boolean, velocityYUp: number, axis: number): void {
     const dt = Math.max(0, Math.min(0.1, seconds)) * 1000;
@@ -84,8 +87,9 @@ export class CharacterAnimation {
   }
   private advance(dt: number, loop: number): void {
     this.elapsed += dt;
-    while (this.elapsed >= this.frame.duration) {
-      this.elapsed -= this.frame.duration;
+    const duration = this.clip === 'Idle' ? this.settings.idleMs : this.clip === 'Walk' ? this.settings.walkMs : this.settings.jumpMs;
+    while (this.elapsed >= duration) {
+      this.elapsed -= duration;
       this.index = this.index + 1 < this.atlas[this.clip].length ? this.index + 1 : loop;
     }
   }

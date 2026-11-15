@@ -5,6 +5,38 @@ const input = (move: number, jump = false) => ({ move, jump, branch: false, merg
 function settle(game: Simulation): void { for (let i = 0; i < 24; i++) game.step(); }
 
 describe('one-unit collidable fork surfaces', () => {
+  it.each(['branch', 'merge'] as const)('shares eased %s geometry with nested ramps, attached jump height and parent support', kind => {
+    const game = new Simulation();
+    game.player.x = 104;
+    game.branch(); settle(game);
+    game.player.x = 160;
+    game.branch();
+    if (kind === 'merge') { settle(game); game.merge(); }
+    const forkX = game.top.forkX;
+    const samples = [];
+    for (let step = 1; step <= 20; step++) {
+      game.step({ ...input(0), jump: step === 1 });
+      const t = step * STEP / game.transitionDuration;
+      const lift = kind === 'branch' ? 1 - (1 - t) ** 3 : 1 - t ** 3;
+      expect(game.surfaceAt(2, 160).height).toBeCloseTo(LANE + LANE * lift);
+      expect(game.surfaceAt(2, forkX).height).toBe(LANE);
+      expect(game.surfaceAt(2, forkX + UNIT / 2).height).toBeCloseTo(LANE + LANE / 2 * lift);
+      expect(game.surfaceAt(1, forkX + UNIT / 2).height).toBe(LANE);
+      expect(game.playerWorldY).toBeCloseTo(game.surfaceAt(2, 160).height + game.player.y);
+      if ([5, 10, 15].includes(step)) samples.push(game.surfaceAt(2, 160).height);
+    }
+    expect(new Set(samples).size).toBe(3);
+    expect(game.depth).toBe(2);
+    expect(game.time).toBe(0);
+    game.setPaused(true);
+    const height = game.playerWorldY;
+    settle(game);
+    expect(game.playerWorldY).toBe(height);
+    game.setPaused(false);
+    game.step();
+    expect(game.transition).toBeNull();
+    expect(game.depth).toBe(kind === 'branch' ? 2 : 1);
+  });
   it('continuously joins the parent and child at both endpoints, with no horizontal support inside the ramp', () => {
     const game = new Simulation();
     game.branch(); settle(game);

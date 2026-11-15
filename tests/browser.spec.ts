@@ -10,6 +10,13 @@ const snapshot = (page: Page) => page.evaluate(() => window.forkingHell.snapshot
 
 test('the common shader produces only palette pixels on a physical integer lattice', async ({ page }) => {
   await start(page);
+  await page.locator('#tuning-toggle').click();
+  await page.getByText('CRT monitor optics', { exact: true }).click();
+  await page.locator('#tune-crt-enabled').uncheck();
+  await page.getByText('Object motion aberration', { exact: true }).first().click();
+  await page.locator('#tune-motion-enabled').uncheck();
+  await page.locator('#tuning-close').click();
+  await page.waitForTimeout(100);
   const pixels = await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
     const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
@@ -21,10 +28,11 @@ test('the common shader produces only palette pixels on a physical integer latti
     const rect = canvas.getBoundingClientRect();
     return { colors: [...colors], width: canvas.width, height: canvas.height, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, dpr: devicePixelRatio };
   });
-  const palette = [0x14102b, 0x221943, 0x352558, 0x6951a6, 0xa17be3, 0xd5b0ff, 0x75f6ec, 0xf5ecff, 0xffd394, 0xff799d];
+  const palette = [0x08060f, 0x221943, 0x352558, 0x6951a6, 0xa17be3, 0xd5b0ff, 0x75f6ec, 0xf5ecff, 0xffd394, 0xff799d];
   expect(pixels.colors.length).toBeGreaterThan(5);
   expect(pixels.colors.filter(c => !palette.includes(c))).toEqual([]);
-  expect([pixels.width, pixels.height]).toEqual([480, 270]);
+  expect(pixels.width).toBeCloseTo(pixels.rect.width * pixels.dpr, 4);
+  expect(pixels.height).toBeCloseTo(pixels.rect.height * pixels.dpr, 4);
   expect(pixels.rect.width * pixels.dpr / 480).toBeCloseTo(Math.round(pixels.rect.width * pixels.dpr / 480), 5);
   expect(pixels.rect.x * pixels.dpr).toBeCloseTo(Math.round(pixels.rect.x * pixels.dpr), 4);
   expect(pixels.rect.y * pixels.dpr).toBeCloseTo(Math.round(pixels.rect.y * pixels.dpr), 4);
@@ -55,7 +63,8 @@ test('pause clears input, freezes both clocks and resumes without held movement'
   const frozen = await snapshot(page);
   await page.waitForTimeout(180);
   expect(await snapshot(page)).toEqual(frozen);
-  await page.locator('#resume').click();
+  await page.keyboard.press('Escape');
+  expect((await snapshot(page)).paused).toBe(false);
   await page.waitForTimeout(100);
   expect((await snapshot(page)).x).toBe(frozen.x);
   await page.keyboard.up('KeyD'); await page.keyboard.up('Space');
@@ -121,8 +130,9 @@ test('native source pixels share the camera scale through branching and restart'
     const data = await page.evaluate(() => window.forkingHell.diagnostics());
     expect(data.zoom).toBeLessThan(initial);
     expect(data.worldPixelScales.length).toBeGreaterThan(1);
-    expect(data.worldPixelScales.every(scale => scale === data.zoom)).toBe(true);
-    expect(data.cameraOrigin.every(Number.isInteger)).toBe(true);
+    expect(data.worldPixelScales.every(scale => scale === 1)).toBe(true);
+    expect(data.worldPixelPitch).toBe(data.zoom * data.physicalPixelScale);
+    expect(data.filterResolution).toEqual(data.worldTarget);
   }
   await page.keyboard.press('Escape'); await page.locator('#restart').click();
   await expect.poll(() => page.evaluate(() => window.forkingHell.diagnostics().zoom)).toBe(initial);
@@ -140,6 +150,14 @@ test('a too-small window pauses rather than cropping the playable composition', 
 
 test('game over saves the score and a new run clears gameplay resources', async ({ page }) => {
   await start(page);
+  // Release in the game frame, not after a cross-process wait that can overshoot the hazard.
+  await page.evaluate(() => {
+    const releaseAtContact = (): void => {
+      if (window.forkingHell.snapshot().x >= 232) window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyD' }));
+      else requestAnimationFrame(releaseAtContact);
+    };
+    requestAnimationFrame(releaseAtContact);
+  });
   await page.keyboard.down('KeyD');
   await page.waitForFunction(() => window.forkingHell.snapshot().x >= 232);
   await page.keyboard.up('KeyD');

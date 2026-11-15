@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#14102b">
+  <meta name="theme-color" content="#08060f">
   <meta name="description" content="Fork the path. Stage your escape. Merge the chaos. A pixel platformer where your movement controls time.">
   <title>Forking Hell — a reversible-time platformer</title>
 </head>
@@ -17,6 +17,7 @@
     <header class="topbar">
       <div class="brand"><h1>Forking Hell</h1><p>A reversible-time platformer</p></div>
       <nav aria-label="Game actions">
+        <button id="tuning-toggle" type="button" aria-controls="tuning-panel" aria-expanded="false">Tune</button>
         <button id="fullscreen" type="button">Fullscreen</button>
         <button id="pause" type="button" disabled>Pause <kbd>Esc</kbd></button>
       </nav>
@@ -24,6 +25,13 @@
     <p class="rotate-note">Landscape gives the graph more room. You can play either way.</p>
     <div id="game" tabindex="0" role="application" aria-label="Forking Hell game" aria-describedby="instructions">
       <div id="canvas-ui">
+        <div id="key-diagram" aria-hidden="true">
+          <span class="keycap fork-key" data-keycap="branch"><span data-icon="branch"></span><small>W</small></span>
+          <span class="keycap left-key" data-keycap="left"><span data-icon="left"></span><small>A</small></span>
+          <span class="keycap merge-key" data-keycap="merge"><span data-icon="merge"></span><small>S</small></span>
+          <span class="keycap right-key" data-keycap="right"><span data-icon="right"></span><small>D</small></span>
+          <span class="keycap jump-key" data-keycap="jump"><span data-icon="jump"></span><small>Space</small></span>
+        </div>
         <button id="start" class="primary" type="button" disabled>Enter the graph →</button>
         <section id="pause-panel" class="overlay" role="dialog" aria-modal="true" aria-label="Paused game and settings" hidden>
           <h2>Take your time.</h2>
@@ -47,13 +55,13 @@
       </div>
       <div id="touch-controls" aria-label="Touch game controls">
         <div class="move-controls">
-          <button type="button" data-control="left" aria-label="Move left and reverse time">←</button>
-          <button type="button" data-control="right" aria-label="Move right and advance time">→</button>
+          <button type="button" data-control="left" aria-label="Move left and reverse time"><span data-icon="left"></span></button>
+          <button type="button" data-control="right" aria-label="Move right and advance time"><span data-icon="right"></span></button>
         </div>
         <div class="action-controls">
-          <button type="button" data-control="merge" aria-label="Merge down one branch">Merge<br>↓</button>
-          <button type="button" data-control="branch" aria-label="Create a branch above">Fork<br>↑</button>
-          <button type="button" data-control="jump" aria-label="Jump">Jump</button>
+          <button type="button" data-control="merge" aria-label="Merge down one branch"><span data-icon="merge"></span></button>
+          <button type="button" data-control="branch" aria-label="Create a branch above"><span data-icon="branch"></span></button>
+          <button type="button" data-control="jump" aria-label="Jump"><span data-icon="jump"></span></button>
         </div>
       </div>
       <section id="size-warning" role="status" hidden>
@@ -62,7 +70,7 @@
       </section>
     </div>
     <footer class="bottom-bar">
-      <p id="instructions">A / D move · Space jump · W fork · S merge · Esc pause</p>
+      <p id="instructions" class="sr-only">A / D or left / right arrows move. Space jumps. W / up forks. S / down merges; hold to repeat. Escape pauses.</p>
       <a href="https://github.com/CameronFoxly/forking-hell" target="_blank" rel="noreferrer">About &amp; source ↗</a>
     </footer>
     <p id="status" class="sr-only" role="status" aria-live="polite">Loading the graph…</p>
@@ -72,6 +80,19 @@
       <button type="button" onclick="location.reload()">Reload</button>
     </section>
   </main>
+  <aside id="tuning-panel" aria-label="Game tuning" hidden>
+    <header><h2>Fine tune the feel</h2><button id="tuning-close" type="button" aria-label="Close tuning panel">Close</button></header>
+    <p class="tuning-note">Live edits affect this tab. Enemy/branch edits need a new run. Click the graph to return keyboard control.</p>
+    <div class="tuning-actions">
+      <button id="tuning-export" type="button">Export JSON</button>
+      <button id="tuning-import" type="button">Import JSON</button>
+      <button id="tuning-reset" type="button">Reset defaults</button>
+      <input id="tuning-file" type="file" accept=".json,application/json" hidden>
+    </div>
+    <p id="tuning-status" role="status">Export saves the complete effective configuration.</p>
+    <button id="tuning-apply" class="primary" type="button" hidden>Apply &amp; start new run</button>
+    <div id="tuning-sections"></div>
+  </aside>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

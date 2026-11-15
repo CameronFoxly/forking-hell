@@ -10,7 +10,9 @@ Octocat, GitHub and associated character/trademark rights belong to their respec
 
 ## Original project assets
 
-The hazard atlas (`public/assets/hazards.png/json`), its generator, bitmap interface glyphs, graph geometry, particle effects and synthesized sound/audio implementation were created for this project with AI assistance. These original project contributions are covered by the repository's MIT license.
+The hazard atlas (`public/assets/hazards.png/json`) including activated palette variants, its generator, bitmap interface glyphs, original pixel keycap icons (`src/control-icons.ts`), graph geometry, particle effects and synthesized sound/audio implementation were created for this project with AI assistance. These original project contributions are covered by the repository's MIT license.
+
+`public/assets/fork-pixel.ttf` is an original font generated from this project's bitmap interface glyphs by `scripts/pixel-font.py`, also under MIT. It is self-hosted; there is no third-party font or remote font service. Normal builds use the committed font. Optional regeneration uses Python and FontTools (a development tool, not redistributed with the game).
 
 No reference JPG/GIF, reference scenery, prototype audio, private prototype source or development caches are distributed with the game.
 

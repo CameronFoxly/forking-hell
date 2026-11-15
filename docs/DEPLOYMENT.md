@@ -8,7 +8,7 @@ Canonical preview: https://cameronfoxly.github.io/forking-hell/
 
 The repository uses the existing **GitHub Actions** Pages setup. `.github/workflows/pages.yml` runs unit tests, strict TypeScript/build, packages the HTML5 ZIP, then uploads `dist` to Pages on `main` pushes. The workflow also supports manual dispatch. It does not create a second Pages site.
 
-Node 24 and `npm ci` reproduce the locked dependencies. Vite's `base: './'` makes script, style and artwork references relative to `index.html`; no backend or CDN is required. Phaser dominates the roughly 1.4 MB raw JavaScript bundle (about 385 KB compressed).
+Node 24 and `npm ci` reproduce the locked dependencies. Vite's `base: './'` makes script, style, font and artwork references relative to `index.html`; no backend or CDN is required. Phaser dominates the roughly 1.46 MB raw JavaScript bundle (about 396 KB compressed).
 
 ## Reproducible itch.io ZIP
 

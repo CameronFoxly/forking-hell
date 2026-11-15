@@ -26,15 +26,15 @@ describe('deadzone, look-ahead and branch framing', () => {
     expect(camera.centerX).toBeLessThan(right - 50);
     expect(camera.lookAhead).toBeLessThan(0);
   });
-  it('zooms out progressively with branch depth while keeping camera origins on the composition grid', () => {
+  it('zooms out progressively without rounding away subpixel camera motion', () => {
     const camera = new CameraRig();
     let previous = camera.zoom;
     for (const depth of [1, 2, 4, 8]) {
       for (let i = 0; i < 120; i++) camera.update(1 / 60, { x: 300, ground: depth * 58, axis: 1, depth, physicalDepth: depth });
       expect(camera.zoom).toBeLessThan(previous);
       previous = camera.zoom;
-      expect(Number.isInteger(camera.originX)).toBe(true);
-      expect(Number.isInteger(camera.originY)).toBe(true);
+      expect(camera.originX).toBeCloseTo(240 - camera.centerX * camera.zoom);
+      expect(camera.originY).toBeCloseTo(135 + camera.centerY * camera.zoom);
     }
   });
   it('camera motion and zoom never advance the environmental clock', () => {

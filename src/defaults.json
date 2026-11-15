@@ -1,0 +1,16 @@
+{
+  "format": "forking-hell-tuning",
+  "version": 2,
+  "values": {
+    "character": { "speed": 90, "idleMs": 200, "walkMs": 60, "jumpMs": 60, "landMs": 66.66666666666667 },
+    "physics": { "gravity": 850, "jumpHeight": 38, "hitProtection": 1.35 },
+    "enemies": { "patrolSpeed": 1, "spinSpeed": 1, "gateSpeed": 1, "patrolRange": 24, "spinnerHeight": 17, "spinnerBob": 9, "firingRate": 1, "shotSpeed": 86, "shotLife": 2.8 },
+    "branches": { "length": 24, "height": 58, "liftDuration": 0.34, "collapseDuration": 0.34, "liftEase": 3, "collapseEase": 3, "holdDelay": 0 },
+    "camera": { "startZoom": 0.88, "minZoom": 0.48, "depthZoom": 0.42, "deadzone": 0.13, "lookAhead": 0.2, "lookDamping": 5, "followDamping": 9, "verticalDamping": 8, "zoomDamping": 6 },
+    "effects": { "particles": 9, "particleLife": 0.65, "particleSpread": 1, "shakeAmount": 2, "shakeDuration": 0.2, "shakeFrequency": 120, "paletteStrength": 1, "inactiveOpacity": 0.7, "highlightStrength": 0.65 },
+    "crt": { "enabled": 1, "opticalEnabled": 1, "opticalDesktop": 0.65, "opticalMobile": 0.35, "scanlinesEnabled": 1, "scanlineStrength": 0.1, "scanlinePeriod": 4, "glowEnabled": 1, "glowStrength": 0.12, "glowRadius": 1, "glowThreshold": 0.7, "curvatureEnabled": 1, "curvature": 0.008, "hudStrength": 0.2 },
+    "motion": { "enabled": 1, "strength": 0.18, "exposureMs": 18, "maxWorldPixels": 2, "maxDesktopCss": 3, "maxMobileCss": 2 },
+    "coins": { "popSpeed": 96, "spread": 48, "gravity": 640, "bounce": 0.42, "friction": 0.78, "shimmer": 0.65 },
+    "audio": { "mergePitchStep": 2, "successThreshold": 4 }
+  }
+}
