@@ -31,6 +31,9 @@ export class WorldRenderer {
   highlightedCopies = 0;
   readonly camera = new CameraRig();
   private previousGame: Simulation | null = null;
+  private visibleEncounters = new Set<string>();
+  private readonly enemyPixels: ImageData;
+  private readonly frameBounds = new Map<string, Phaser.Geom.Rectangle>();
   animation: { clip: Clip; index: number; facing: number } = { clip: 'Idle', index: 0, facing: 1 };
   get pixelScales(): number[] { return [this.cat.scaleX, ...this.enemies.slice(0, this.usedEnemies).map(enemy => enemy.scaleX)]; }
 
@@ -44,6 +47,14 @@ export class WorldRenderer {
     this.presentation = scene.add.renderTexture(0, 0, WORLD_WIDTH, WORLD_HEIGHT).setOrigin(0).setVertexRoundMode('off');
     this.presentation.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.hud = scene.add.graphics().setDepth(3);
+    const image = scene.textures.get('hazards').getSourceImage();
+    if (!(image instanceof HTMLImageElement)) throw new Error('Hazard artwork must be a loaded image.');
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width; canvas.height = image.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Hazard visibility needs a 2D image reader.');
+    context.drawImage(image, 0, 0);
+    this.enemyPixels = context.getImageData(0, 0, canvas.width, canvas.height);
     scene.events.once('shutdown', () => {
       this.g.destroy(); this.cat.destroy(); this.composition.destroy();
       this.motion.destroy();
@@ -56,6 +67,44 @@ export class WorldRenderer {
     this.outputScale = scale; this.density = density; this.hud.setScale(scale);
   }
 
+  forkTargets(game: Simulation): readonly string[] {
+    return game === this.previousGame ? [...this.visibleEncounters] : [];
+  }
+
+  private opaqueBounds(frame: Phaser.Textures.Frame): Phaser.Geom.Rectangle {
+    const key = String(frame.name), cached = this.frameBounds.get(key);
+    if (cached) return cached;
+    let left = frame.width, top = frame.height, right = 0, bottom = 0;
+    for (let y = 0; y < frame.height; y++) for (let x = 0; x < frame.width; x++) {
+      if (this.enemyPixels.data[((frame.cutY + y) * this.enemyPixels.width + frame.cutX + x) * 4 + 3]) {
+        left = Math.min(left, x); top = Math.min(top, y);
+        right = Math.max(right, x + 1); bottom = Math.max(bottom, y + 1);
+      }
+    }
+    if (right <= left || bottom <= top) throw new Error(`Hazard frame ${key} has no visible pixels.`);
+    const bounds = new Phaser.Geom.Rectangle(left, top, right - left, bottom - top);
+    this.frameBounds.set(key, bounds);
+    return bounds;
+  }
+
+  private recordVisible(id: string, x: number, y: number, width: number, height: number, opaque?: (x: number, y: number) => boolean): void {
+    if (this.visibleEncounters.has(id)) return;
+    const scale = this.presentation.scaleX;
+    const left = this.presentation.x + (x - this.sourceLeft) * scale;
+    const top = this.presentation.y + (y + this.sourceTop) * scale;
+    const right = left + width * scale, bottom = top + height * scale;
+    // Match the final nearest-neighbor physical samples, excluding opaque HUD.
+    const x0 = Math.max(0, Math.ceil(left - .5)), x1 = Math.min(this.scene.game.canvas.width, Math.ceil(right - .5));
+    const y0 = Math.max(34 * this.outputScale, Math.ceil(top - .5)), y1 = Math.min(this.scene.game.canvas.height, Math.ceil(bottom - .5));
+    for (let py = y0; py < y1; py++) for (let px = x0; px < x1; px++) {
+      if (px >= 120 * this.outputScale && px < 378 * this.outputScale && py >= 237 * this.outputScale && py < 259 * this.outputScale) continue;
+      if (!opaque || opaque(Math.floor((px + .5 - left) / scale), Math.floor((py + .5 - top) / scale))) {
+        this.visibleEncounters.add(id);
+        return;
+      }
+    }
+  }
+
   private ring(x: number, y: number, color: number, radius = 4): void {
     const g = this.g;
     g.lineStyle(2, color).strokeRect(Math.round(x - radius), Math.round(y - radius), radius * 2, radius * 2);
@@ -65,6 +114,7 @@ export class WorldRenderer {
   draw(game: Simulation, view: ViewState, frame: CharacterFrame, clip: Clip, index: number): void {
     let g = this.g.clear();
     this.usedEnemies = 0;
+    this.visibleEncounters.clear();
     if (game !== this.previousGame) { this.camera.reset(game.config.camera); this.motion.reset(); this.previousGame = game; }
     this.camera.update(game.paused || game.gameOver ? 0 : view.delta, {
       x: game.player.x, ground: game.playerWorldY - game.player.y,
@@ -197,6 +247,11 @@ export class WorldRenderer {
           this.usedEnemies++;
           const worldY = game.surfaceAt(depth, pose.x).height + pose.y - (hazard.kind === 'spinner' ? 8 : 0);
           enemy.setFrame(frame).setPosition(screenX(pose.x), screenY(worldY)).setVisible(true).setAlpha(active ? 1 : effects.inactiveOpacity);
+          if (enemy.alpha > 0) {
+            const bounds = this.opaqueBounds(enemy.frame);
+            this.recordVisible(hazard.id, enemy.x - enemy.width / 2 + bounds.x, enemy.y - enemy.height + bounds.y, bounds.width, bounds.height,
+              (x, y) => this.enemyPixels.data[((enemy.frame.cutY + bounds.y + y) * this.enemyPixels.width + enemy.frame.cutX + bounds.x + x) * 4 + 3]! > 0);
+          }
           this.motion.sprite(`enemy:${branch.id}:${hazard.id}`, enemy, pose.x, worldY);
         }
         if (activated) {
@@ -218,7 +273,7 @@ export class WorldRenderer {
             }
           }
         }
-        if (depth === game.depth && depth > 0) {
+        if (game.isSwitch(depth, hazard.id)) {
           const sx = screenX(hazard.x);
           const sy = screenY(game.surfaceAt(depth, hazard.x).height) - 15;
           const staged = branch.staged.has(hazard.id);
@@ -231,6 +286,9 @@ export class WorldRenderer {
             }
           }
           this.ring(sx, sy, staged ? C.cyan : C.gold, 5);
+          for (const [x, y, w, h] of [[-6, -6, 2, 12], [4, -6, 2, 12], [-4, -6, 8, 2], [-4, 4, 8, 2], [-9, -1, 4, 2], [5, -1, 4, 2]]) {
+            this.recordVisible(hazard.id, sx + x!, sy + y!, w!, h!);
+          }
           this.motion.rect(`switch:${branch.id}:${hazard.id}`, hazard.x, game.surfaceAt(depth, hazard.x).height + 15, 10, 10, staged ? C.cyan : C.gold);
           if (staged) g.fillStyle(C.cyan).fillRect(sx - 2, sy - 2, 4, 4);
           else g.fillStyle(C.ink).fillRect(sx - 2, sy - 2, 4, 4);
@@ -341,9 +399,9 @@ export function hint(game: Simulation, touch = false): [string, string] {
   const t = game.tutorial;
   if (!t.moved) return ['THE WORLD WAITS FOR YOU', touch ? 'HOLD RIGHT TO MOVE. RELEASE. HOLD LEFT TO REVERSE.' : 'A / D OR ARROWS: MOVE RIGHT. STOP. REVERSE LEFT.'];
   if (!t.jumped) return ['JUMP, THEN JUMP AGAIN', touch ? 'HOLD JUMP HIGHER. RELEASE AND TAP AGAIN IN AIR.' : 'HOLD SPACE HIGHER. RELEASE AND PRESS AGAIN IN AIR.'];
-  if (!t.branched) return ['MAKE A DIFFERENT PATH', touch ? 'TAP FORK. ORDINARY DANGER BECOMES A SWITCH.' : 'W / UP: FORK. ORDINARY DANGER BECOMES A SWITCH.'];
+  if (!t.branched) return ['MAKE A DIFFERENT PATH', touch ? 'TAP FORK. VISIBLE ENEMIES BECOME SWITCHES.' : 'W / UP: FORK. VISIBLE ENEMIES BECOME SWITCHES.'];
   if (!t.staged) return ['STAGE YOUR ESCAPE', 'TOUCH A GOLD COMMIT RING. WATCH FOR SHOTS BELOW.'];
   if (!t.merged) return ['BRING IT HOME', touch ? 'TAP MERGE. STAGED DANGER BECOMES COINS BELOW.' : 'S / DOWN: MERGE ONE LEVEL. STAGED DANGER BECOMES COINS.'];
   if (!t.collected) return ['GO BACK FOR WHAT YOU MADE', 'REVERSE LEFT TO COLLECT. YOUR REWARDS STAY YOURS.'];
-  return ['MORE BRANCHES. MORE CROSSFIRE.', 'FORK. STAGE. MERGE. HOW FAR CAN YOU TAKE IT?'];
+  return ['NEW ENEMIES. NEW FORKS.', 'NEW DANGER AHEAD? FORK AGAIN. STAGE. MERGE.'];
 }

@@ -13,10 +13,12 @@ No install or account needed. Choose **Enter the graph** to start.
 **Move right to advance the environment, stop to freeze it, and move left to reverse it.** Time follows actual movement, so pushing against a wall does not advance it. During play, your jumps, gravity, coin drops and triggered effects keep moving forward. A frozen hazard can still hurt you if you fall into it.
 
 1. **Fork:** Create a higher branch with a walkable ramp behind you; the parent lane continues underneath. Fork again to go deeper; there is no arbitrary gameplay depth cap.
-2. **Stage:** Move or jump the Octocat into a gold commit ring. All enemies, including shooters, become switches on the highest fork. Every unconverted lower shooter still fires across lanes; main without a fork remains dangerous. Staged targets highlight their corresponding copies on ancestor branches.
+2. **Stage:** Move or jump the Octocat into a gold commit ring. A fork turns the enemies visible when you create it, including shooters, into switches on the new top lane. Enemies encountered afterward remain dangerous on that lane too: fork again once they are on screen to create their switches. Every unconverted lower shooter still fires across lanes; main without a fork remains dangerous. Staged targets highlight their corresponding copies on ancestor branches.
 3. **Merge:** Collapse one branch into its parent. Staged counterparts below pop into bouncing coins when the descending platform reaches them, not when Merge is pressed. Nested stages carry down one merge at a time. Tap for one merge, or hold to continue down the stack after each eased collapse. Each obstacle copy can reward once.
 
 **Reversal is not undo.** Stages, merges, destruction and collected rewards stay permanent for the current run. Unstaged hazards remain dangerous, and forking or merging does not make you invulnerable.
+
+Each fork remembers its original visible encounters. Moving the camera, backtracking or merging back to an older fork never expands that coverage; an unstaged new enemy is still dangerous there.
 
 Three hits end the run. Score comes from **5 points per new game unit of forward progress**, **100 per converted obstacle copy**, and **25 per coin**. Backtracking does not earn the same distance points again.
 

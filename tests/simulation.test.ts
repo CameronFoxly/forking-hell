@@ -102,9 +102,9 @@ describe('branch and permanent transaction loop', () => {
 
   it('stages once and merges exactly one level, carrying the relationship toward main', () => {
     const game = new Simulation();
-    game.branch(); settle(game);
+    game.branch(['0:0', '0:1']); settle(game);
     game.stage('0:1');
-    game.branch(); settle(game);
+    game.branch(['0:0', '0:1']); settle(game);
     expect(game.stage('0:0')).toBe(true);
     expect(game.stage('0:0')).toBe(false);
     game.merge(); settle(game);
@@ -122,7 +122,7 @@ describe('branch and permanent transaction loop', () => {
 
   it('keeps unstaged hazards dangerous and never resurrects converted targets or duplicates rewards', () => {
     const game = new Simulation();
-    game.branch(); settle(game);
+    game.branch(['0:0', '0:1']); settle(game);
     game.stage('0:0'); game.merge(); settle(game);
     const target = encounters(game.seed, 0)[0]!;
     const unstaged = encounters(game.seed, 0)[1]!;
@@ -136,8 +136,8 @@ describe('branch and permanent transaction loop', () => {
 
   it('awards each branch copy, not a lineage-wide budget', () => {
     const game = new Simulation();
-    game.branch(); settle(game);
-    game.branch(); settle(game);
+    game.branch(['0:0']); settle(game);
+    game.branch(['0:0']); settle(game);
     game.stage('0:0'); game.merge(); settle(game);
     expect(game.destructionScore).toBe(100);
     game.merge(); settle(game);
@@ -146,7 +146,7 @@ describe('branch and permanent transaction loop', () => {
 
   it('permanently collects coins with forward-only drop motion under frozen/reversed environment', () => {
     const game = new Simulation();
-    game.branch(); settle(game);
+    game.branch(['0:0']); settle(game);
     game.stage('0:0'); game.merge();
     expect(game.coins.size).toBe(0);
     settle(game);
@@ -191,7 +191,7 @@ describe('reversible hazards and stable projectile identities', () => {
     const game = new Simulation();
     const shooter = firstShooter(game.seed);
     game.player.x = shooter.x - ATTACK_RANGE + 60;
-    game.branch(); settle(game);
+    game.branch([shooter.id]); settle(game);
     expect(game.isOrdinaryActive(1, shooter)).toBe(false);
     expect(game.isOrdinaryActive(0, shooter)).toBe(true);
     game.time = shooter.phase - STEP / 2;
@@ -208,7 +208,7 @@ describe('reversible hazards and stable projectile identities', () => {
     const game = new Simulation();
     const shooter = firstShooter(game.seed);
     game.player.x = shooter.x - 90;
-    game.branch(); settle(game);
+    game.branch([shooter.id]); settle(game);
     game.time = shooter.phase - STEP / 2;
     game.step({ ...idle, move: 1 });
     const shot = [...game.shots.values()].find(s => s.branchId === 0 && s.birth === shooter.phase)!;
@@ -248,7 +248,7 @@ describe('reversible hazards and stable projectile identities', () => {
 
   it('checks the falling body, not an early destination overlap, during an unstaged merge', () => {
     const game = new Simulation();
-    game.branch(); settle(game);
+    game.branch(['0:0']); settle(game);
     game.player.x = 232;
     game.merge();
     game.step();
@@ -268,7 +268,7 @@ describe('reversible hazards and stable projectile identities', () => {
     game.time = (Math.PI / 2 - gate.phase) * gate.period / (2 * Math.PI);
     game.player.x = gate.x - 26;
     const time = game.time;
-    game.branch();
+    game.branch([gate.id]);
     run(game, 0.05, { move: 1 });
     expect(game.transition).not.toBeNull();
     expect(game.player.x).toBe(gate.x - 26);
@@ -337,7 +337,7 @@ describe('reversible hazards and stable projectile identities', () => {
 
   it.each([8, 64, 256])('supports depth %i without a gameplay cap or recursive stack traversal', depth => {
     const game = new Simulation();
-    for (let i = 0; i < depth; i++) { game.branch(); settle(game); }
+    for (let i = 0; i < depth; i++) { game.branch(['0:0']); settle(game); }
     expect(game.depth).toBe(depth);
     game.stage('0:0');
     for (let i = 0; i < depth; i++) { game.merge(); settle(game); }

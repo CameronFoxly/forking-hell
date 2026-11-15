@@ -15,12 +15,13 @@ export const SHOT_SPEED = DEFAULTS.enemies.shotSpeed;
 export const ATTACK_RANGE = SHOT_LIFE * SHOT_SPEED + 30;
 
 export type HazardKind = 'patrol' | 'spinner' | 'shooter' | 'gate';
-export type Input = { move: number; jump: boolean; jumpPressed?: boolean; branch: boolean; merge: boolean };
+export type Input = { move: number; jump: boolean; jumpPressed?: boolean; branch: boolean; merge: boolean; forkTargets?: readonly string[] };
 export type Encounter = { id: string; kind: HazardKind; x: number; phase: number; period: number };
 export type Branch = {
   id: number;
   forkX: number;
   forkBase: number;
+  readonly covered: ReadonlySet<string>;
   staged: Set<string>;
   converted: Set<string>;
 };
@@ -140,7 +141,7 @@ export function sweptHit(ax: number, ay: number, bx: number, by: number, halfWid
 export class Simulation {
   readonly seed: number;
   player: Player = { x: 64, y: 0, vy: 0, grounded: true, health: 3, invulnerable: 0, facing: 1 };
-  branches: Branch[] = [{ id: 0, forkX: 0, forkBase: 0, staged: new Set(), converted: new Set() }];
+  branches: Branch[] = [{ id: 0, forkX: 0, forkBase: 0, covered: new Set(), staged: new Set(), converted: new Set() }];
   readonly coins = new Map<string, Coin>();
   readonly shots = new Map<string, Shot>();
   readonly awarded = new Set<string>();
@@ -247,7 +248,11 @@ export class Simulation {
   }
 
   isOrdinaryActive(depth: number, hazard: Encounter): boolean {
-    return !this.isConverted(depth, hazard.id) && (depth !== this.depth || depth === 0);
+    return !this.isConverted(depth, hazard.id) && !this.isSwitch(depth, hazard.id);
+  }
+
+  isSwitch(depth: number, id: string): boolean {
+    return depth > 0 && depth === this.depth && this.top.covered.has(id) && !this.isConverted(depth, id);
   }
 
   setPaused(paused: boolean): void {
@@ -265,7 +270,7 @@ export class Simulation {
     return lineages;
   }
 
-  branch(): boolean {
+  branch(visibleEncounters: readonly string[] = []): boolean {
     if (this.transition || this.gameOver || this.paused) return false;
     this.endMergeHold();
     const forkBase = this.surfaceAt(this.depth, this.player.x - this.unit).height;
@@ -273,6 +278,7 @@ export class Simulation {
       id: this.nextBranch++,
       forkX: this.player.x - this.unit,
       forkBase,
+      covered: new Set(visibleEncounters),
       staged: new Set(),
       converted: new Set(),
     });
@@ -284,7 +290,7 @@ export class Simulation {
   }
 
   stage(id: string): boolean {
-    if (this.depth === 0 || this.top.staged.has(id) || this.isConverted(this.depth, id)) return false;
+    if (!this.isSwitch(this.depth, id) || this.top.staged.has(id)) return false;
     this.top.staged.add(id);
     this.tutorial.staged = true;
     this.events.push('stage');
@@ -358,7 +364,11 @@ export class Simulation {
     }
     this.branchShots.delete(child.id);
     this.branches.pop();
-    if (this.depth > 0) this.retainAirborneShots(this.branchShots.get(parent.id) ?? []);
+    if (this.depth > 0) {
+      const hidden = [...(this.branchShots.get(parent.id) ?? [])].filter(shot =>
+        this.isSwitch(this.depth, shot.sourceId) || this.isConverted(this.depth, shot.sourceId));
+      this.retainAirborneShots(hidden);
+    }
     this.tutorial.merged = true;
     this.shakeAt = this.realTime;
     this.events.push('merge');
@@ -621,7 +631,7 @@ export class Simulation {
     if (fork && input.merge) { this.endMergeHold(); this.mergeBlocked = true; }
     const merge = input.merge && !this.mergeBlocked && (!this.held.merge || this.mergeWait === 0);
     this.held = { jump: input.jump, branch: input.branch, merge: input.merge };
-    if (fork) this.branch();
+    if (fork) this.branch(input.forkTargets);
     else if (merge) this.merge();
     if (jump && (this.player.grounded || this.airJumpReady)) {
       const airborne = !this.player.grounded;
@@ -723,7 +733,7 @@ export class Simulation {
 
     for (const hazard of hazards) {
       if (hazard.x < this.branches[physicalDepth]!.forkX || this.isConverted(physicalDepth, hazard.id)) continue;
-      if (physicalDepth === this.depth && this.depth > 0) {
+      if (this.isSwitch(physicalDepth, hazard.id)) {
         const targetY = this.surfaceAt(this.depth, hazard.x).height + 15;
         if (!this.transition && Math.abs(this.player.x - hazard.x) < 18 && Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - targetY) < 18 && this.stage(hazard.id)) {
           this.bursts.push({ x: hazard.x, branchId: this.top.id, age: 0, kind: 'stage' });
@@ -746,7 +756,7 @@ export class Simulation {
       }
     }
 
-    // The highest fork exposes switches; lower living sources retain their own firing events.
+    // Only covered top copies become switches; every other living source fires.
     for (let depth = 0; depth <= this.depth; depth++) {
       const branch = this.branches[depth]!;
       for (const hazard of hazards) {

@@ -46,7 +46,7 @@ describe('variable jump energy', () => {
 describe('merge landing feedback', () => {
   it.each([0, 2])('starts one pulse only at completion with %i staged targets', targets => {
     const game = new Simulation(123);
-    game.branch(); settle(game);
+    game.branch(['0:0', '0:1']); settle(game);
     for (let i = 0; i < targets; i++) game.stage(`0:${i}`);
     game.merge();
     const steps = Math.ceil(game.config.branches.collapseDuration * 60);
@@ -122,7 +122,7 @@ describe('timing and migration', () => {
 describe('landing rewards and local coin physics', () => {
   it('bounces on a retained parent ramp and transfers coins crossing its foot onto main', () => {
     const game = new Simulation();
-    game.player.x = 240; game.branch(); settle(game); game.branch(); settle(game);
+    game.player.x = 240; game.branch(['0:0']); settle(game); game.branch(['0:0']); settle(game);
     game.stage('0:0'); game.player.x = 320; game.merge(); settle(game);
     expect(game.depth).toBe(1);
     ticks(game, 360);
@@ -138,12 +138,13 @@ describe('landing rewards and local coin physics', () => {
   });
   it('converts once on geometric impact, not at merge start or midair, then bounces and separates copies', () => {
     const game = new Simulation();
-    for (let d = 0; d < 4; d++) { game.branch(); settle(game); }
+    for (let d = 0; d < 4; d++) { game.branch(['0:0']); settle(game); }
     game.stage('0:0');
     const receivingDepth = game.depth - 1;
     game.merge(); ticks(game, 10);
     expect(game.destructionScore).toBe(0); expect(game.coins.size).toBe(0);
-    while (!game.coins.size) game.step();
+    for (let n = 0; n < 30 && !game.coins.size; n++) game.step();
+    expect(game.coins.size).toBeGreaterThan(0);
     const target = game.pose(encounters(game.seed, 0)[0]!);
     expect(game.surfaceAt(game.depth, target.x).height).toBeLessThanOrEqual(game.surfaceAt(receivingDepth, target.x).height + 17);
     expect(game.events.filter(event => event === 'destroy')).toHaveLength(1);

@@ -307,11 +307,13 @@ class GameScene extends Phaser.Scene {
         transition: simulation.transition?.kind ?? null, animation: this.world.animation,
         mergeCombo: simulation.mergeCombo,
         airJumpAvailable: simulation.airJumpAvailable,
+        covered: [...simulation.top.covered],
       }),
       diagnostics: () => ({
         engine: Phaser.VERSION, shaderPasses: this.palette.runs, logical: [WIDTH, HEIGHT],
         physicalPixelScale: this.presentation.scale, dpr: this.presentation.dpr,
         cameraX: this.world.cameraX, visibleHazards: this.world.renderedHazards,
+        visibleEncounters: this.world.forkTargets(simulation),
         zoom: this.world.camera.zoom, cameraOrigin: [this.world.camera.originX, this.world.camera.originY],
         worldPixelScales: this.world.pixelScales,
         highlightedCopies: this.world.highlightedCopies, tuning: tuningDocument(tuning),
@@ -346,7 +348,9 @@ class GameScene extends Phaser.Scene {
       this.accumulator += Math.min(delta / 1000, 0.1);
       while (this.accumulator >= STEP) {
         const firstEvent = simulation.events.length;
-        simulation.step(controls.sample(), STEP, reducedMotion);
+        const input = controls.sample();
+        if (input.branch) input.forkTargets = this.world.forkTargets(simulation);
+        simulation.step(input, STEP, reducedMotion);
         for (const event of simulation.events.slice(firstEvent)) {
           if (event === 'jump') character.jumped();
           if (event === 'land') character.landed();

@@ -1,6 +1,18 @@
 # Validation
 
-## Current source: varied encounter progression and final input boundaries
+## Current source: visible-only fork coverage
+
+**102 unit tests, strict TypeScript/build and 100 targeted browser checks passed**, with 12 intended CDP-only skips. The browser run covers `fork-coverage`, `browser`, `projectiles`, `render`, `tween-render`, `jump` and `tuning` across Chromium, Firefox, WebKit and DPR3 Chromium touch emulation. This is not a full-suite or physical-device claim.
+
+Each accepted fork snapshots only the displayed enemy/switch identities. Six focused units cover copied/nonexpanding coverage, cache eviction and regeneration, reversal, rejected forks, uncovered top patrol/shooter damage, top-source firing, refork/contact staging, merge propagation through an older uncovered branch, and source retirement versus an uncovered parent's still-valid replay history. Existing transaction/geometry scenarios now supply their intended visible targets explicitly instead of relying on unlimited top safety.
+
+Each browser target compares 144 actual before/after rendered images: shooter bodies, moving patrols and switches at all four view edges, zoom 0.88/0.3 and output scales 1/3. Coverage matches whether the sprite contributes displayed pixels, including when an entity is drawn into overscan but entirely outside the canvas. Pan after the fork never changes the captured set. Initial acceptance caught a subpixel bounding-box false positive; coverage now checks nearest-neighbor physical samples against source alpha instead of geometric overlap alone. These checks concern the gameplay composition, not cosmetic CRT/glow fringes.
+
+Real keyboard routes in every browser target encounter a shooter absent from the original fork's coverage, observe its active top source and airborne shot, then create a new fork, touch its switch and merge into the original branch. The receiving shooter converts while main remains active; original coverage does not grow. Desktop and mobile-layout captures are preserved in session files under `fork-coverage-review/` (`desktop-uncovered.png`, `desktop-staged.png`, `mobile-uncovered.png`, `mobile-staged.png`). Acceptance log: `fork-coverage-browser.log`.
+
+Already-airborne shots keep the existing independent-flight rule: converted/hidden/removed sources' shots last only until the next birth/expiry boundary. Merging back to an **uncovered, living** top shooter does not retire its legitimate replay path. The source defaults, encounter progression, permanent rewards, common pixel rendering and letterboxing remain unchanged. This is local source/build work; no public deployment or ZIP update was made.
+
+## Varied encounter progression and final input boundaries: `0a434dc`
 
 **96 unit tests and strict TypeScript/build passed.** Across the focused browser runs, 122 distinct applicable checks passed and six CDP-only cases were intentionally skipped. The final 60-case menu/projectile rerun passed across Chromium, Firefox, WebKit and DPR3 Chromium touch; the other 62 checks cover general gameplay/recovery, double jump, native touch ownership, exact world-pixel rendering and eased geometry/shake. This is not a full-suite or physical-phone claim.
 

@@ -9,7 +9,7 @@ const idle = { move: 0, jump: false, branch: false, merge: false };
 const tick = (game: Simulation, count: number, input = idle) => { for (let i = 0; i < count; i++) game.step(input); };
 function branches(depth: number): Simulation {
   const game = new Simulation();
-  for (let i = 0; i < depth; i++) { game.branch(); tick(game, 24); }
+  for (let i = 0; i < depth; i++) { game.branch(['0:0']); tick(game, 24); }
   game.events.length = 0;
   return game;
 }

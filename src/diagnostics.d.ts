@@ -7,11 +7,11 @@ declare global {
         x: number; y: number; time: number; depth: number; health: number; score: number;
         paused: boolean; staged: string[]; converted: number; coins: number; started: boolean; gameOver: boolean;
         transition: 'branch' | 'merge' | null; animation: { clip: string; index: number; facing: number };
-        mergeCombo: number; airJumpAvailable: boolean;
+        mergeCombo: number; airJumpAvailable: boolean; covered: string[];
       };
       diagnostics(): {
         engine: string; shaderPasses: number; logical: number[]; physicalPixelScale: number; dpr: number;
-        cameraX: number; visibleHazards: number; visibleShots: number; retainedShots: number;
+        cameraX: number; visibleHazards: number; visibleShots: number; retainedShots: number; visibleEncounters: readonly string[];
         zoom: number; cameraOrigin: number[];
         worldPixelScales: number[];
         highlightedCopies: number; tuning: ReturnType<typeof import('./tuning').tuningDocument>;

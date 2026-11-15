@@ -3,12 +3,15 @@ import { Simulation, STEP } from '../src/simulation';
 import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 
 const right = { move: 1, jump: false, branch: false, merge: false };
-function settle(game: Simulation): void { while (game.transition) game.step(); }
+function settle(game: Simulation): void {
+  for (let n = 0; n < 120 && game.transition; n++) game.step();
+  expect(game.transition).toBeNull();
+}
 function scene(depth: number) {
   const game = new Simulation(SHOOTER_SEED), shooter = firstShooter();
   game.player.x = shooter.x - 100;
   game.player.invulnerable = 100;
-  for (let d = 0; d < depth; d++) { game.branch(); settle(game); }
+  for (let d = 0; d < depth; d++) { game.branch([shooter.id]); settle(game); }
   return { game, shooter };
 }
 function emit(game: Simulation, birth: number): void {
@@ -19,13 +22,13 @@ describe('projectile emission and permanent source lifetime', () => {
   it('does not backfill pre-existing flight when a copy is forked while time is held', () => {
     const { game, shooter } = scene(1);
     game.time = shooter.phase + .5;
-    game.branch(); const copy = game.top.id; settle(game);
+    game.branch([shooter.id]); const copy = game.top.id; settle(game);
     expect([...game.shots.values()].filter(shot => shot.branchId === copy)).toEqual([]);
   });
 
   it.each(['branch', 'merge'] as const)('records lower-copy muzzles during a nested %s, not the moving top lane', kind => {
     const { game, shooter } = scene(2);
-    if (kind === 'branch') game.branch(); else game.merge();
+    if (kind === 'branch') game.branch([shooter.id]); else game.merge();
     for (let n = 0; n < 5; n++) game.step();
     const depth = game.depth - 1, copy = game.branches[depth]!.id;
     const eventAge = game.transition!.age + STEP / 2;
@@ -40,7 +43,7 @@ describe('projectile emission and permanent source lifetime', () => {
 
   it.each(['crossing', 'boundary'])('re-emits a living copy at the birth %s from its new muzzle, with the same identity and direction', boundary => {
     const { game, shooter } = scene(1);
-    game.branch(); game.step();
+    game.branch([shooter.id]); game.step();
     const copy = game.branches[1]!.id;
     emit(game, shooter.phase);
     const shot = [...game.shots.values()].find(s => s.branchId === copy && s.birth === shooter.phase)!;
@@ -117,7 +120,7 @@ describe('projectile emission and permanent source lifetime', () => {
     expect(game.shotPose(shot)).toBeNull();
     emit(game, shooter.phase);
     expect(game.shotPose(shot)).toBeNull();
-    game.branch(); settle(game);
+    game.branch([shooter.id]); settle(game);
     expect(game.shotPose(shot)).toBeNull();
     emit(game, shooter.phase);
     expect(game.shots.get(shot.id)).toBe(shot);
@@ -135,7 +138,7 @@ describe('projectile emission and permanent source lifetime', () => {
     game.time = shooter.phase + game.config.enemies.shotLife; game.step();
     expect([...game.shots.values()].some(s => s.branchId === removed)).toBe(false);
     expect([...game.shotsNear(shooter.x - 300, shooter.x + 300, -300, 300)].some(s => s.branchId === removed)).toBe(false);
-    game.branch(); settle(game);
+    game.branch([shooter.id]); settle(game);
     expect(game.top.id).not.toBe(removed);
     expect([...game.shots.values()].some(s => s.branchId === game.top.id)).toBe(false);
     emit(game, shooter.phase + shooter.period);

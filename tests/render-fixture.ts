@@ -16,6 +16,7 @@ declare global { interface Window {
   effectProbe: (enabled: boolean, config?: Partial<Tuning['crt']>, started?: boolean, mobile?: boolean) => Promise<string>;
   muzzleProbe: (kind: 'branch' | 'merge') => Promise<{ image: string; left: number; top: number; points: { x: number; y: number }[] }>;
   shakeProbe: () => Promise<{ before: number; midair: number; landed: number; pulse: number; paused: number; reduced: number; expired: number; restarted: number; motion: number; time: number }>;
+  forkViewProbe: (zoom: number, scale: number, side: string, offset: number, kind: 'shooter' | 'patrol' | 'switch') => Promise<{ baseline: string; image: string; visible: boolean; covered: boolean; afterPan: boolean; rendered: number }>;
 } }
 class Probe extends Phaser.Scene {
   preload(): void {
@@ -35,6 +36,42 @@ class Probe extends Phaser.Scene {
     const frame = atlas.Idle[0]!;
     const draw = (): void => world.draw(simulation, { started: true, reducedMotion: true, best: 0, touch: false, delta: 0 }, frame, 'Idle', 0);
     draw();
+    window.forkViewProbe = async (zoom, scale, side, offset, kind) => {
+      simulation = new Simulation(SHOOTER_SEED);
+      const shooter = { ...firstShooter(), kind: kind === 'patrol' ? 'patrol' as const : 'shooter' as const, phase: Math.PI / 2 };
+      const chunk = Math.floor(shooter.x / 480);
+      simulation.player.x = shooter.x - 100;
+      if (kind === 'switch') {
+        simulation.branch([shooter.id]); while (simulation.transition) simulation.step();
+      }
+      simulation.paused = true;
+      simulation.config.effects.inactiveOpacity = kind === 'switch' ? 0 : 1;
+      this.scale.resize(480 * scale, 270 * scale); world.resize(scale); draw();
+      world.camera.zoom = zoom;
+      const x = side === 'right' ? 480 + offset * zoom : side === 'left' ? offset * zoom : 440;
+      const y = side === 'top' ? 34 + offset * zoom : side === 'bottom' ? 270 + offset * zoom : 160;
+      const pose = simulation.pose(shooter);
+      const worldX = kind === 'switch' ? shooter.x : pose.x;
+      const worldY = simulation.surfaceAt(simulation.depth, worldX).height + (kind === 'switch' ? 15 : pose.y);
+      world.camera.centerX = worldX - (x - 240) / zoom;
+      world.camera.centerY = worldY + (y - 135) / zoom;
+      const capture = async (): Promise<string> => {
+        draw(); await new Promise<void>(resolve => this.game.events.once('postrender', resolve));
+        return this.game.canvas.toDataURL();
+      };
+      simulation.chunks.set(chunk, []);
+      const baseline = await capture();
+      simulation.chunks.set(chunk, [shooter]);
+      const image = await capture(), targets = world.forkTargets(simulation), visible = targets.includes(shooter.id), rendered = world.renderedHazards;
+      simulation.paused = false;
+      simulation.branch(targets);
+      const covered = simulation.top.covered.has(shooter.id);
+      simulation.paused = true;
+      world.camera.centerX = shooter.x;
+      world.camera.centerY = simulation.lane + 49 / zoom;
+      await capture();
+      return { baseline, image, visible, covered, afterPan: simulation.top.covered.has(shooter.id), rendered };
+    };
     window.shakeProbe = async () => {
       simulation = new Simulation();
       simulation.branch(); while (simulation.transition) simulation.step();
@@ -64,8 +101,8 @@ class Probe extends Phaser.Scene {
       simulation.config.branches.liftDuration = .8; simulation.config.branches.collapseDuration = .2;
       const shooter = firstShooter();
       simulation.player.x = shooter.x - 100;
-      for (let n = 0; n < 2; n++) { simulation.branch(); while (simulation.transition) simulation.step(); }
-      if (kind === 'branch') simulation.branch(); else simulation.merge();
+      for (let n = 0; n < 2; n++) { simulation.branch([shooter.id]); while (simulation.transition) simulation.step(); }
+      if (kind === 'branch') simulation.branch([shooter.id]); else simulation.merge();
       for (let n = 0; n < 5; n++) simulation.step();
       const birthAge = simulation.transition!.age + STEP / 2;
       simulation.time = shooter.phase - STEP / 2;
@@ -125,7 +162,7 @@ class Probe extends Phaser.Scene {
       simulation.config.effects.highlightStrength = 0;
       for (let i = 0; i < 2; i++) {
         simulation.player.x = 104 + i * 56;
-        simulation.branch();
+        simulation.branch(['0:0', '0:1']);
         for (let step = 0; step < 24; step++) simulation.step();
       }
       if (staged) simulation.stage('0:0');
