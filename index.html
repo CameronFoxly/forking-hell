@@ -64,20 +64,21 @@
           <button type="button" data-control="jump" aria-label="Jump"><span data-icon="jump"></span></button>
         </div>
       </div>
-      <section id="size-warning" role="status" hidden>
-        <h2>The graph needs more room.</h2>
-        <p>Rotate your device or enlarge this window. Play is paused until the full pixel canvas fits.</p>
+      <section id="size-warning" role="dialog" aria-modal="true" aria-labelledby="size-title" aria-describedby="size-description" hidden>
+        <h2 id="size-title">The graph needs more room.</h2>
+        <p id="size-description">Rotate your device or enlarge this window. Play is paused until the full pixel canvas fits.</p>
+        <button id="size-fullscreen" type="button">Try fullscreen</button>
       </section>
     </div>
     <footer class="bottom-bar">
-      <p id="instructions" class="sr-only">A / D or left / right arrows move. Hold Space to jump higher; release and press again for one air jump. W / up forks. S / down merges; hold to repeat. Escape pauses.</p>
+      <p id="instructions" class="sr-only">Press a typing key, Enter, Space or left/right arrow to start. Tab and up/down arrows navigate menus. A / D or left / right arrows move. Hold Space to jump higher; release and press again for one air jump. W / up forks. S / down merges; hold to repeat. Escape pauses.</p>
       <a href="https://github.com/CameronFoxly/forking-hell" target="_blank" rel="noreferrer">About &amp; source ↗</a>
     </footer>
     <p id="status" class="sr-only" role="status" aria-live="polite">Loading the graph…</p>
     <aside id="notice" role="status" hidden><p id="notice-message"></p><button id="dismiss-notice" type="button" aria-label="Dismiss notice">Dismiss</button></aside>
-    <section id="error" role="alert" hidden>
-      <h2>The graph couldn't start.</h2><p id="error-message"></p>
-      <button type="button" onclick="location.reload()">Reload</button>
+    <section id="error" role="alertdialog" aria-modal="true" aria-labelledby="error-title" aria-describedby="error-message" hidden>
+      <h2 id="error-title">The graph couldn't start.</h2><p id="error-message"></p>
+      <button id="reload" type="button" onclick="location.reload()">Reload</button>
     </section>
   </main>
   <aside id="tuning-panel" aria-label="Game tuning" hidden>

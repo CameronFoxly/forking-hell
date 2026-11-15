@@ -1,6 +1,12 @@
 # Validation
 
-## Current source: double jump, black letterboxing and top switches
+## Keyboard menus and readiness-gated start
+
+**92 existing unit tests, strict TypeScript/build and all 48 keyboard-menu browser cases passed** across Chromium, Firefox, WebKit and DPR3 Chromium touch. The broader `browser` suite also passed its 41 applicable cases, with three CDP-only skips. Keyboard acceptance covers six starting keys, held/repeated input, native shortcuts and IME, all jump-particle Tune sections, keyboard export/Reset, pause/settings/results, notice dismissal, loading, failed artwork recovery and undersized viewports. The starting key is consumed until release; no gameplay action leaks from it.
+
+Cross-browser acceptance caught Firefox stripping modifiers from a native button-generated click. Start now checks the initiating key state as well as the click flags without intercepting browser shortcuts. The image-failure fixture now rejects every loader retry until recovery is explicitly enabled, and the full native Tune traversal has a 60-second test budget for slower touch rendering. No defaults, physics or pixel rendering were changed. This is local source/build work, not a public deployment or package update.
+
+## Double jump, black letterboxing and top switches: `041fa27`
 
 **92 unit tests, strict TypeScript/build and 55 targeted browser checks passed**, with nine intended CDP-only skips in the 64-case browser run. The browser run covered `jump`, `letterbox`, `projectiles`, `tuning`, `render` and `tween-render` across Chromium, Firefox, WebKit and DPR3 Chromium touch emulation. This is not a claim that every browser suite was rerun or that physical phone hardware was tested.
 

@@ -331,7 +331,7 @@ export class WorldRenderer {
       text(g, 'FORK THE PATH.', 262, 44, C.pale);
       text(g, 'STAGE YOUR ESCAPE.', 262, 59, C.pale);
       text(g, 'MERGE THE CHAOS.', 262, 74, C.pale);
-      text(g, 'YOU MOVE. TIME FOLLOWS.', 28, 122, C.violet);
+      text(g, 'ANY KEY TO START. TAB FOR MENUS.', 28, 122, C.violet);
       if (view.best) text(g, `PERSONAL BEST ${view.best}`, 262, 103, C.gold);
     }
   }

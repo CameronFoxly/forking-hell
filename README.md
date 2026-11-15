@@ -32,7 +32,9 @@ Three hits end the run. Score comes from **5 points per new game unit of forward
 
 Staging happens through character contact with a ring; there is no separate stage button. Touch supports simultaneous movement and actions, with accidental text selection suppressed on game controls. Landscape gives the graph more room; if the pixel canvas cannot fit, the game pauses and asks you to resize or rotate.
 
-The in-game pixel keycaps show the keyboard arrangement. Menus support Tab/Shift+Tab, Enter/Space and Up/Down navigation; Escape closes Tune or resumes a paused run. Tune keeps native arrow-key editing for numbers, sliders and checkboxes, and lets you return focus to gameplay.
+From the ready intro, press a typing key, Enter, Space or a left/right arrow to start, or click **Enter the graph**. The starting press is consumed until release; use a fresh press to move, jump or fork. Tab/Shift+Tab and Up/Down navigate menus rather than starting. Shortcuts, modifier-only keys and composition are left alone.
+
+The in-game pixel keycaps show the keyboard arrangement. Menu actions support Enter/Space and visible keyboard focus. Escape closes Tune or resumes a paused run, with focus restored to the relevant menu or game. Tune keeps native numeric/range/text editing and lets you Tab back to gameplay. Pause/results and recovery dialogs contain keyboard focus, including an owned notice's Dismiss action; an undersized viewport offers **Try fullscreen**. Loading, Tune editing and blocking recovery dialogs never start a run from stray keys.
 
 ### Settings and saves
 

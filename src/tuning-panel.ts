@@ -1,7 +1,7 @@
 import { DEFAULTS, entries, FIELDS, needsRestart, parseTuning, RESTART_SECTIONS, SECTIONS, tuningDocument } from './tuning';
 import type { Tuning } from './tuning';
 
-export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, restart: boolean) => void, clearInput: () => void) {
+export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, restart: boolean) => void, clearInput: () => void, focusAfterClose: () => void) {
   const panel = document.getElementById('tuning-panel')!;
   const toggle = document.getElementById('tuning-toggle')!;
   const status = document.getElementById('tuning-status')!;
@@ -88,26 +88,17 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
     }
     controls.append(details);
   }
-  toggle.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
+  function setOpen(open: boolean, restoreFocus = true): void {
+    panel.hidden = !open;
     toggle.setAttribute('aria-expanded', String(!panel.hidden));
     document.body.dataset.tuning = panel.hidden ? 'closed' : 'open';
     clearInput();
-    if (!panel.hidden) panel.querySelector<HTMLElement>('summary')?.focus({ preventScroll: true });
-  });
-  document.getElementById('tuning-close')!.addEventListener('click', () => { toggle.click(); toggle.focus(); });
+    if (open) panel.querySelector<HTMLElement>('summary')?.focus();
+    else if (restoreFocus) focusAfterClose();
+  }
+  toggle.addEventListener('click', () => setOpen(panel.hidden));
+  document.getElementById('tuning-close')!.addEventListener('click', () => setOpen(false));
   panel.addEventListener('focusin', clearInput);
-  panel.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { event.stopPropagation(); toggle.click(); toggle.focus(); }
-    else if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && event.target instanceof HTMLElement && event.target.matches('button, summary')) {
-      const options = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled), summary')].filter(option => option.getClientRects().length);
-      const index = options.indexOf(event.target);
-      if (index >= 0) {
-        event.preventDefault();
-        options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus();
-      }
-    }
-  });
   commit.addEventListener('click', () => {
     fileRequest++;
     try {
@@ -148,6 +139,7 @@ export function mountTuningPanel(read: () => Tuning, apply: (next: Tuning, resta
   });
   refresh();
   return {
+    close: (restoreFocus = true): void => setOpen(false, restoreFocus),
     updateCrtStatus(view: { active: boolean; budgetBlocked: boolean; reduced: boolean; mobile: boolean; started: boolean }): void {
       const config = read().crt;
       const state = !config.enabled ? 'CRT is off.' : view.budgetBlocked ? 'CRT is bypassed: this canvas exceeds the GPU budget.' :

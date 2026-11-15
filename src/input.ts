@@ -5,6 +5,13 @@ const bindings: Record<string, Action> = {
   ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right',
   Space: 'jump', ArrowUp: 'branch', KeyW: 'branch', ArrowDown: 'merge', KeyS: 'merge',
 };
+export function preservesNativeKey(event: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey' | 'isComposing' | 'key'>): boolean {
+  return event.ctrlKey || event.metaKey || event.altKey || event.isComposing || ['Dead', 'Process', 'Unidentified'].includes(event.key);
+}
+export function isIntroStartKey(event: KeyboardEvent): boolean {
+  return !event.repeat && !preservesNativeKey(event) &&
+    (event.key.length === 1 || ['Enter', 'ArrowLeft', 'ArrowRight'].includes(event.key));
+}
 
 export class Controls {
   private keys = new Set<string>();
@@ -13,13 +20,12 @@ export class Controls {
   private edges = new Set<Action>();
   private abort = new AbortController();
 
-  constructor(private readonly onPause: () => void, private readonly onGesture: () => void) {
+  constructor(private readonly onGesture: () => void, private readonly canPlay: () => boolean) {
     const options = { signal: this.abort.signal };
     const ownsInput = (target: EventTarget | null): boolean => target instanceof HTMLElement &&
       Boolean(target.closest('#tuning-panel, button, input, textarea, select, summary, a, [contenteditable="true"]'));
     window.addEventListener('keydown', e => {
-      if (e.target instanceof HTMLElement && e.target.closest('#tuning-panel')) return;
-      if (e.code === 'Escape' && !e.repeat) { this.onPause(); return; }
+      if (e.defaultPrevented || preservesNativeKey(e) || !this.canPlay()) return;
       if (ownsInput(e.target)) return;
       if (!bindings[e.code]) return;
       e.preventDefault();
@@ -37,6 +43,7 @@ export class Controls {
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-control]')) {
       const action = button.dataset.control as Action;
       button.addEventListener('keydown', e => {
+        if (e.defaultPrevented || preservesNativeKey(e) || !this.canPlay()) return;
         if (e.code !== 'Space' && e.code !== 'Enter') return;
         e.preventDefault();
         if (!e.repeat) {
@@ -46,6 +53,7 @@ export class Controls {
         this.paintPressed(); this.onGesture();
       }, options);
       button.addEventListener('pointerdown', e => {
+        if (!this.canPlay()) return;
         e.preventDefault();
         button.setPointerCapture(e.pointerId);
         if (!this.activeActions().has(action)) this.edges.add(action);

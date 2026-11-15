@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { AudioEngine } from './audio';
 import { CharacterAnimation, parseCharacterAtlas } from './character';
-import { Controls } from './input';
+import { Controls, isIntroStartKey, preservesNativeKey } from './input';
 import { installControlIcons } from './control-icons';
 import { attachCrt } from './crt';
 import { applyPixelComposition, fitCanvas, HEIGHT, WIDTH } from './pixel';
@@ -22,6 +22,7 @@ function element<T extends HTMLElement>(id: string): T {
 let tuning = structuredClone(DEFAULTS);
 let simulation = new Simulation(undefined, tuning);
 let started = false;
+let ready = false;
 let viewportFits = true;
 const touch = window.matchMedia('(pointer: coarse)').matches;
 let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,6 +32,13 @@ let character: CharacterAnimation | null = null;
 const viewport = element('game');
 const status = element('status');
 const panel = element('pause-panel');
+const results = element('game-over');
+const errorPanel = element('error');
+const sizeWarning = element('size-warning');
+const tune = element('tuning-panel');
+const notice = element('notice');
+let noticeReturn: HTMLElement | null = null;
+let nativeKeyActive = false;
 const startButton = element<HTMLButtonElement>('start');
 const pauseButton = element<HTMLButtonElement>('pause');
 const reducedInput = element<HTMLInputElement>('reduced');
@@ -52,7 +60,34 @@ function notify(message: string): void {
   console.warn(message);
 }
 function clearNotice(message: string): void {
-  if (element('notice-message').textContent === message) element('notice').hidden = true;
+  if (element('notice-message').textContent === message) dismissNotice();
+}
+function visibleAction(node: HTMLElement): boolean {
+  const closed = node.closest('details:not([open])');
+  return !node.matches(':disabled, [hidden]') && !!node.getClientRects().length &&
+    getComputedStyle(node).visibility !== 'hidden' && (!closed || node.matches('summary') && node.parentElement === closed);
+}
+function menuContext(): { root: HTMLElement; modal: boolean } | null {
+  const blocked = !errorPanel.hidden ? errorPanel : !sizeWarning.hidden ? sizeWarning : !panel.hidden ? panel : !results.hidden ? results : null;
+  if (!tune.hidden && errorPanel.hidden) return { root: tune, modal: !!blocked };
+  return blocked ? { root: blocked, modal: true } : null;
+}
+function focusMenu(): void {
+  const root = menuContext()?.root;
+  const preferred = root === panel ? element('resume') : root === results ? element('again') :
+    root === errorPanel ? element('reload') : root === sizeWarning ? element('size-fullscreen') :
+      root === tune ? tune.querySelector<HTMLElement>('summary') : started ? viewport : startButton;
+  if (preferred && visibleAction(preferred)) preferred.focus();
+}
+function dismissNotice(): void {
+  const focused = notice.contains(document.activeElement);
+  notice.hidden = true;
+  if (focused) {
+    const root = menuContext();
+    if (noticeReturn && visibleAction(noticeReturn) && (!root?.modal || root.root.contains(noticeReturn))) noticeReturn.focus();
+    else focusMenu();
+  }
+  noticeReturn = null;
 }
 function persist(): void {
   if (!storageAvailable) return;
@@ -68,7 +103,7 @@ soundInput.checked = audio.sound; musicInput.checked = audio.music;
 reducedInput.addEventListener('change', () => { reducedMotion = reducedInput.checked; persist(); });
 soundInput.addEventListener('change', () => { audio.sound = soundInput.checked; persist(); });
 musicInput.addEventListener('change', () => { audio.music = musicInput.checked; audio.updateAmbient(); persist(); });
-element('dismiss-notice').addEventListener('click', () => { element('notice').hidden = true; });
+element('dismiss-notice').addEventListener('click', dismissNotice);
 for (const control of document.querySelectorAll<HTMLElement>('button, input, a[href]')) control.tabIndex = 0;
 
 function pause(): void {
@@ -78,7 +113,7 @@ function pause(): void {
   document.body.dataset.state = 'paused';
   controls.clear();
   panel.hidden = false;
-  element<HTMLButtonElement>('resume').focus({ preventScroll: true });
+  if (tune.hidden || !tune.contains(document.activeElement)) focusMenu();
 }
 function resume(): void {
   if (!started || simulation.gameOver || !viewportFits) return;
@@ -90,7 +125,7 @@ function resume(): void {
   viewport.focus({ preventScroll: true });
 }
 function restart(focusGame = true): void {
-  if (!viewportFits) return;
+  if (!ready || !viewportFits || !errorPanel.hidden) return;
   const seed = crypto.getRandomValues(new Uint32Array(1))[0]!;
   simulation = new Simulation(seed, tuning);
   character?.reset();
@@ -106,48 +141,96 @@ function restart(focusGame = true): void {
   if (focusGame) viewport.focus({ preventScroll: true });
 }
 installControlIcons();
-controls = new Controls(() => simulation.paused ? resume() : pause(), () => { void audio.unlock(); });
-startButton.addEventListener('click', () => restart());
+controls = new Controls(() => { void audio.unlock(); }, () => ready && started && !simulation.paused && !simulation.gameOver && viewportFits && errorPanel.hidden);
+function introReady(): boolean {
+  return ready && !started && viewportFits && tune.hidden && errorPanel.hidden && sizeWarning.hidden;
+}
+startButton.addEventListener('click', event => {
+  if (introReady() && !event.ctrlKey && !event.metaKey && !event.altKey && (event.detail !== 0 || !nativeKeyActive)) restart();
+});
 element('restart').addEventListener('click', () => restart());
 element('again').addEventListener('click', () => restart());
 const tuningPanel = mountTuningPanel(() => tuning, (next, newRun) => {
+  if (newRun && !ready) throw new Error('Wait for the game to load, or reload after an error, before applying a new run.');
   if (newRun && !viewportFits) throw new Error('Enlarge the game viewport before applying a new run. Your pending values are unchanged.');
   tuning = next;
   simulation.config = next;
   if (character) character.settings = next.character;
   if (newRun) restart(false);
-}, () => { controls.clear(); simulation.endMergeHold(); });
+}, () => { controls.clear(); simulation.endMergeHold(); }, () => {
+  if (menuContext()?.modal) focusMenu();
+  else element('tuning-toggle').focus({ preventScroll: true });
+});
 pauseButton.addEventListener('click', pause);
 element('resume').addEventListener('click', resume);
-window.addEventListener('blur', pause);
+window.addEventListener('blur', () => { nativeKeyActive = false; pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 window.addEventListener('pagehide', e => {
   if (e.persisted) pause();
   else { audio.destroy(); controls.destroy(); }
 });
-document.addEventListener('keydown', e => {
-  const overlay = !panel.hidden ? panel : !element('game-over').hidden ? element('game-over') : null;
-  if (!overlay) return;
-  const focusable = [...overlay.querySelectorAll<HTMLElement>('button:not(:disabled), input')];
-  const first = focusable[0], last = focusable[focusable.length - 1];
-  if (e.code === 'Tab') {
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-  } else if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
-    const index = focusable.indexOf(document.activeElement as HTMLElement);
-    if (index < 0) return;
-    e.preventDefault(); e.stopPropagation();
-    focusable[(index + (e.code === 'ArrowDown' ? 1 : -1) + focusable.length) % focusable.length]?.focus();
+document.addEventListener('focusin', event => {
+  if (notice.contains(event.target as Node) && !notice.contains(event.relatedTarget as Node | null)) {
+    noticeReturn = event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null;
   }
 });
-element('fullscreen').addEventListener('click', async () => {
+document.addEventListener('keydown', event => {
+  // Firefox's native button click can omit the initiating key's modifiers.
+  nativeKeyActive = preservesNativeKey(event);
+  if (event.defaultPrevented || preservesNativeKey(event)) return;
+  const target = event.target instanceof HTMLElement ? event.target : null;
+  const consume = (): void => { event.preventDefault(); event.stopPropagation(); };
+  const context = menuContext();
+  if (event.repeat && ['Enter', ' '].includes(event.key) && target?.matches('button, summary, a[href], input[type="checkbox"]')) { consume(); return; }
+  if (event.key === 'Escape') {
+    if (event.repeat) return;
+    consume();
+    if (target && notice.contains(target)) dismissNotice();
+    else if (!errorPanel.hidden || !sizeWarning.hidden && tune.hidden) focusMenu();
+    else if (!tune.hidden) {
+      tuningPanel.close();
+    } else if (!panel.hidden) resume();
+    else if (!results.hidden) focusMenu();
+    else if (started) pause();
+    else focusMenu();
+    return;
+  }
+  const tab = event.key === 'Tab' && context?.modal;
+  const arrows = ['ArrowUp', 'ArrowDown'].includes(event.key) &&
+    (context?.modal || !started || target?.matches('button, summary, a, input[type="checkbox"]'));
+  if (tab || arrows) {
+    if (arrows && target?.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]')) return;
+    const owner = target?.closest<HTMLElement>('#tuning-panel, #notice');
+    const root = context?.modal ? context.root : owner ?? document.body;
+    const roots = context?.modal && !notice.hidden && root !== notice ? [root, notice] : [root];
+    const selector = 'button, input:not([type="hidden"]), select, textarea, a[href], summary';
+    const actions = roots.flatMap(node => [...node.querySelectorAll<HTMLElement>(selector)]).filter(visibleAction);
+    const options = tab ? actions : actions.filter(node => node.matches('button, summary, a, input[type="checkbox"], input[type="radio"]'));
+    const index = options.indexOf(document.activeElement as HTMLElement);
+    const backwards = tab ? event.shiftKey : event.key === 'ArrowUp';
+    consume();
+    if (options.length) {
+      const next = index < 0 ? backwards ? options.length - 1 : 0 : (index + (backwards ? -1 : 1) + options.length) % options.length;
+      options[next]!.focus();
+    }
+    return;
+  }
+  if (event.key === 'Enter' && target?.matches('input[type="checkbox"]')) { consume(); target.click(); return; }
+  if (introReady() && isIntroStartKey(event) && (target === startButton || target === viewport || target === document.body || target === document.documentElement || target instanceof HTMLCanvasElement)) {
+    consume(); restart();
+  }
+}, true);
+document.addEventListener('keyup', event => { nativeKeyActive = preservesNativeKey(event); }, true);
+async function toggleFullscreen(): Promise<void> {
   try {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen();
   } catch {
     notify('Fullscreen is unavailable here. You can keep playing in this window.');
   }
-});
+}
+element('fullscreen').addEventListener('click', toggleFullscreen);
+element('size-fullscreen').addEventListener('click', toggleFullscreen);
 
 class GameScene extends Phaser.Scene {
   private world!: WorldRenderer;
@@ -166,6 +249,7 @@ class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    if (!errorPanel.hidden) return;
     const texture = this.textures.get('octocat');
     const image = texture.getSourceImage();
     let atlas: ReturnType<typeof parseCharacterAtlas>;
@@ -181,12 +265,17 @@ class GameScene extends Phaser.Scene {
     const canvas = this.game.canvas;
     canvas.setAttribute('aria-label', 'Forking Hell pixel game. Keyboard controls are described below.');
     const resize = (): void => {
+      const warningFocused = sizeWarning.contains(document.activeElement);
       this.presentation = fitCanvas(this.game, viewport);
       this.world.resize(this.presentation.scale, this.presentation.dpr);
       viewportFits = this.presentation.fits;
-      element('size-warning').hidden = viewportFits;
-      if (!viewportFits) pause();
-      if (!started) startButton.disabled = !viewportFits;
+      sizeWarning.hidden = viewportFits;
+      if (!viewportFits) {
+        pause();
+        if (tune.hidden) focusMenu();
+      }
+      if (!started) startButton.disabled = !ready || !viewportFits;
+      if (viewportFits && warningFocused) focusMenu();
       const ui = element('canvas-ui');
       for (const property of ['width', 'height', 'left', 'top'] as const) ui.style[property] = canvas.style[property];
       viewport.scrollTo(0, 0);
@@ -195,8 +284,9 @@ class GameScene extends Phaser.Scene {
     observer.observe(viewport);
     window.addEventListener('resize', resize);
     this.events.once('shutdown', () => { observer.disconnect(); window.removeEventListener('resize', resize); });
+    ready = true;
     resize();
-    status.textContent = 'Ready. Move right to advance time, stop to freeze, left to reverse.';
+    status.textContent = 'Ready. Press Enter, Space, an arrow to the left or right, or a typing key to enter. Tab and Up/Down navigate menus.';
     startButton.disabled = !viewportFits;
     if (!started && document.activeElement === document.body && viewportFits) startButton.focus({ preventScroll: true });
     canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); this.world.motion.reset(); this.crt.suspend(); pause(); showError('Graphics connection lost. Reload to restore the pixel renderer.'); });
@@ -290,9 +380,14 @@ class GameScene extends Phaser.Scene {
 }
 
 function showError(message: string): void {
+  ready = false;
+  simulation.setPaused(true);
+  controls.clear(); audio.setPaused(true);
+  tuningPanel.close(false);
   element('error').hidden = false;
   element('error-message').textContent = message;
   startButton.disabled = true;
+  focusMenu();
   console.error(message);
 }
 
