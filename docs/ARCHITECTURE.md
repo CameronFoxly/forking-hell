@@ -40,6 +40,8 @@ Only covered switches on the topmost reached lane can stage; collection and stag
 
 Staging immediately identifies corresponding copies through every ancestor. Original activated atlas variants swap purple accents for cyan/white without changing alpha, source pixels or red danger details. Pixel brackets and links supplement color; activated enemies remain dangerous until converted. Unrelated lineages do not change. Coins on a collapsed branch transfer to its parent and retain IDs, positions and velocities. Source destruction, switch-only status and removal preserve only already-airborne flight until its next temporal boundary.
 
+Crawler switches use the same signed-time patrol X as their bodies. `switchPose` places the ring and staging hitbox 15 pixels above the eased support at that moving X; connectors, highlights and motion anchors track it too. Stage bursts originate at contact X and then finish independently on forward action time. Patrol motion never changes the stable encounter identity or a fork's original coverage; other switch types keep their existing positions.
+
 Coin launches use deterministic per-copy impulses. Forward-clock gravity, surface-normal restitution, friction and nearby circle separation make piles spread. Positions are relative to authoritative moving support; crossing left of a ramp transfers ownership onto the reached parent. This keeps backtracked coins visible and collectible. Idle highlights are native pixel strokes; reduced effects restrain shimmer. Coin motion only feeds cosmetic fringes, never the reverse environmental clock.
 
 ## Reversible shots and bounded work

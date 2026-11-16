@@ -256,9 +256,8 @@ export class WorldRenderer {
         }
         if (activated) {
           this.highlightedCopies++;
-          const switchOnly = !game.isOrdinaryActive(depth, hazard);
-          const sx = screenX(switchOnly ? hazard.x : pose.x);
-          const y = screenY(game.surfaceAt(depth, switchOnly ? hazard.x : pose.x).height), sy = y - 15;
+          const sx = screenX(pose.x);
+          const y = screenY(game.surfaceAt(depth, pose.x).height), sy = y - 15;
           const pulse = view.reducedMotion ? 1 : .75 + .25 * Math.sin(game.realTime * 5);
           const alpha = effects.highlightStrength * pulse;
           g.fillStyle(C.cyan, alpha * .2).fillRect(sx - 16, y - 30, 32, 32);
@@ -267,18 +266,18 @@ export class WorldRenderer {
           if (depth > 0) {
             const lower = screenY(game.surfaceAt(depth - 1, pose.x).height) - 15;
             for (let py = sy; py < lower; py++) {
-              const px = Math.round(sx + (pose.x - sx) * (py - sy) / (lower - sy));
-              g.fillStyle(C.cyan, alpha * .2).fillRect(px - 2, py, 5, 1);
-              if ((py - sy) % 6 < 3) g.fillStyle(C.cyan, alpha).fillRect(px, py, 1, 1);
+              g.fillStyle(C.cyan, alpha * .2).fillRect(sx - 2, py, 5, 1);
+              if ((py - sy) % 6 < 3) g.fillStyle(C.cyan, alpha).fillRect(sx, py, 1, 1);
             }
           }
         }
         if (game.isSwitch(depth, hazard.id)) {
-          const sx = screenX(hazard.x);
-          const sy = screenY(game.surfaceAt(depth, hazard.x).height) - 15;
+          const target = game.switchPose(depth, hazard);
+          const sx = screenX(target.x);
+          const sy = screenY(target.y);
           const staged = branch.staged.has(hazard.id);
           if (staged) {
-            const length = Math.max(0, screenY(game.surfaceAt(depth - 1, hazard.x).height) - 15 - sy - 7);
+            const length = Math.max(0, screenY(game.surfaceAt(depth - 1, target.x).height) - 15 - sy - 7);
             for (let lineY = sy + 7; lineY < sy + 7 + length; lineY += 7) g.fillStyle(C.muted).fillRect(sx, lineY, 1, 3);
             if (length > 0) {
               const pulse = ((game.time * 22) % length + length) % length;
@@ -289,7 +288,7 @@ export class WorldRenderer {
           for (const [x, y, w, h] of [[-6, -6, 2, 12], [4, -6, 2, 12], [-4, -6, 8, 2], [-4, 4, 8, 2], [-9, -1, 4, 2], [5, -1, 4, 2]]) {
             this.recordVisible(hazard.id, sx + x!, sy + y!, w!, h!);
           }
-          this.motion.rect(`switch:${branch.id}:${hazard.id}`, hazard.x, game.surfaceAt(depth, hazard.x).height + 15, 10, 10, staged ? C.cyan : C.gold);
+          this.motion.rect(`switch:${branch.id}:${hazard.id}`, target.x, target.y, 10, 10, staged ? C.cyan : C.gold);
           if (staged) g.fillStyle(C.cyan).fillRect(sx - 2, sy - 2, 4, 4);
           else g.fillStyle(C.ink).fillRect(sx - 2, sy - 2, 4, 4);
         }

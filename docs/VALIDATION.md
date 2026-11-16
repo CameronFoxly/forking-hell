@@ -1,6 +1,16 @@
 # Validation
 
-## Current source: visible-only fork coverage
+## Current source: moving crawler switches
+
+**105 unit tests, strict TypeScript/build and all 40 targeted browser checks passed** across Chromium, Firefox, WebKit and DPR3 Chromium touch emulation. The browser run covers `fork-coverage`, `render`, `tween-render` and `projectiles`; this is not a full-suite or physical-device claim.
+
+Three focused unit cases cover contact at the current patrol position instead of the old spawn center, positive/negative frozen environmental time, two fork depths, nested-ramp support height and stage-burst emission origin. Both stale-center contact cases failed before the fix. A renderer probe checks 16 frames per browser target: staged/unstaged rings, connector strokes, highlights and actual motion-tracker anchors on one/two forks, moving forward, frozen and reversed.
+
+Real keyboard routes in every browser target create a nested fork, move forward, freeze, reverse, touch the moving crawler switch and backtrack with its stage intact and all three hearts remaining. Visually reviewed desktop/mobile-layout captures show the ring and both crawler copies vertically aligned; saved as `crawler-review/desktop-staged.png` and `crawler-review/mobile-staged.png` in session files. Acceptance log: `crawler-browser.log`.
+
+The persistent local preview was restarted and verified at `http://127.0.0.1:4173/`. All v3 defaults, immutable fork coverage, source-owned projectile behavior and other enemy positions remain unchanged. Source/build only: no public deployment or ZIP update.
+
+## Visible-only fork coverage: `4ee63ac`
 
 **102 unit tests, strict TypeScript/build and 100 targeted browser checks passed**, with 12 intended CDP-only skips. The browser run covers `fork-coverage`, `browser`, `projectiles`, `render`, `tween-render`, `jump` and `tuning` across Chromium, Firefox, WebKit and DPR3 Chromium touch emulation. This is not a full-suite or physical-device claim.
 

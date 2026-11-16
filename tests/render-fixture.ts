@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import { parseCharacterAtlas } from '../src/character';
 import { applyPixelComposition } from '../src/pixel';
 import { WorldRenderer } from '../src/renderer';
-import { Simulation, STEP } from '../src/simulation';
+import { encounters, Simulation, STEP } from '../src/simulation';
 import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 import { attachCrt } from '../src/crt';
 import type { Tuning } from '../src/tuning';
 
 type ProbeResult = { native: string; filtered: string; screen: string; left: number; top: number; x: number; y: number; pitch: number; filter: number[] };
 type JunctionResult = { image: string; left: number; top: number; forks: { x: number; y: number; end: number }[]; supports: number[]; depth: number; danger: boolean; converted: boolean };
+type CrawlerFrame = { phase: string; image: string; left: number; top: number; time: number; x: number; y: number; anchor: { x: number; y: number } | null; covered: string[] };
 declare global { interface Window {
   renderProbe: (zoom: number, pan: number, scale: number) => Promise<ProbeResult>;
   junctionProbe: (staged: boolean, merges: number, pan: number) => Promise<JunctionResult>;
@@ -17,6 +18,7 @@ declare global { interface Window {
   muzzleProbe: (kind: 'branch' | 'merge') => Promise<{ image: string; left: number; top: number; points: { x: number; y: number }[] }>;
   shakeProbe: () => Promise<{ before: number; midair: number; landed: number; pulse: number; paused: number; reduced: number; expired: number; restarted: number; motion: number; time: number }>;
   forkViewProbe: (zoom: number, scale: number, side: string, offset: number, kind: 'shooter' | 'patrol' | 'switch') => Promise<{ baseline: string; image: string; visible: boolean; covered: boolean; afterPan: boolean; rendered: number }>;
+  crawlerProbe: (depth: number, staged: boolean) => Promise<CrawlerFrame[]>;
 } }
 class Probe extends Phaser.Scene {
   preload(): void {
@@ -36,6 +38,38 @@ class Probe extends Phaser.Scene {
     const frame = atlas.Idle[0]!;
     const draw = (): void => world.draw(simulation, { started: true, reducedMotion: true, best: 0, touch: false, delta: 0 }, frame, 'Idle', 0);
     draw();
+    window.crawlerProbe = async (depth, staged) => {
+      simulation = new Simulation(123);
+      const crawler = encounters(123, 0)[0]!;
+      for (let n = 0; n < depth; n++) {
+        simulation.branch([crawler.id]);
+        for (let step = 0; step < 120 && simulation.transition; step++) simulation.step();
+      }
+      if (staged) simulation.stage(crawler.id);
+      world.resize(3); draw();
+      world.camera.zoom = .65; world.camera.centerX = crawler.x - 60; world.camera.centerY = 58;
+      const sample = world.motion.tracker.sample.bind(world.motion.tracker);
+      let anchor: CrawlerFrame['anchor'] = null;
+      world.motion.tracker.sample = (id, x, y) => {
+        if (id === `switch:${simulation.top.id}:${crawler.id}`) anchor = { x, y };
+        return sample(id, x, y);
+      };
+      const frames: CrawlerFrame[] = [];
+      try {
+        for (const [phase, move, steps] of [['initial', 0, 0], ['forward', 1, 30], ['frozen', 0, 30], ['reversed', -1, 30]] as const) {
+          for (let n = 0; n < steps; n++) simulation.step({ move, jump: false, branch: false, merge: false });
+          draw(); await new Promise<void>(resolve => this.game.events.once('postrender', resolve));
+          const image = await new Promise<string>((resolve, reject) => {
+            world.composition.snapshot(value => value instanceof HTMLImageElement ? resolve(value.src) : reject(new Error('Crawler snapshot failed')));
+          });
+          const x = simulation.pose(crawler).x, y = simulation.surfaceAt(depth, x).height + 15;
+          frames.push({ phase, image, left: world.sourceLeft, top: world.sourceTop, time: simulation.time, x, y, anchor, covered: [...simulation.top.covered] });
+        }
+      } finally {
+        world.motion.tracker.sample = sample;
+      }
+      return frames;
+    };
     window.forkViewProbe = async (zoom, scale, side, offset, kind) => {
       simulation = new Simulation(SHOOTER_SEED);
       const shooter = { ...firstShooter(), kind: kind === 'patrol' ? 'patrol' as const : 'shooter' as const, phase: Math.PI / 2 };

@@ -202,6 +202,10 @@ export class Simulation {
     const pose = this.pose(hazard, time);
     return { x: pose.x, y: this.surfaceAt(depth, pose.x, age).height + pose.y + 12 };
   }
+  switchPose(depth: number, hazard: Encounter): { x: number; y: number } {
+    const x = this.pose(hazard).x;
+    return { x, y: this.surfaceAt(depth, x).height + 15 };
+  }
   get score(): number { return this.coinScore + this.destructionScore + this.distanceScore; }
   get currentDepth(): number { return this.surfaceAt(this.depth, this.player.x).depth; }
   get playerWorldY(): number {
@@ -734,9 +738,9 @@ export class Simulation {
     for (const hazard of hazards) {
       if (hazard.x < this.branches[physicalDepth]!.forkX || this.isConverted(physicalDepth, hazard.id)) continue;
       if (this.isSwitch(physicalDepth, hazard.id)) {
-        const targetY = this.surfaceAt(this.depth, hazard.x).height + 15;
-        if (!this.transition && Math.abs(this.player.x - hazard.x) < 18 && Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - targetY) < 18 && this.stage(hazard.id)) {
-          this.bursts.push({ x: hazard.x, branchId: this.top.id, age: 0, kind: 'stage' });
+        const target = this.switchPose(physicalDepth, hazard);
+        if (!this.transition && Math.abs(this.player.x - target.x) < 18 && Math.abs(this.playerWorldY + PLAYER_HEIGHT / 2 - target.y) < 18 && this.stage(hazard.id)) {
+          this.bursts.push({ x: target.x, branchId: this.top.id, age: 0, kind: 'stage' });
         }
       }
     }

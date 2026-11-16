@@ -1,6 +1,82 @@
 import { expect, test } from '@playwright/test';
 import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 
+test('crawler rings, staged links and motion anchors follow signed patrol time on nested forks', async ({ page }) => {
+  test.skip(Boolean(process.env.PREVIEW_URL), 'The deterministic renderer probe is not distributed.');
+  await page.goto('/tests/render-fixture.html');
+  await page.waitForFunction(() => Boolean(window.crawlerProbe));
+  const results = await page.evaluate(async () => {
+    const results = [];
+    for (const depth of [1, 2]) for (const staged of [false, true]) {
+      const frames = await window.crawlerProbe(depth, staged);
+      const samples = [];
+      for (const frame of frames) {
+        const image = new Image(); image.src = frame.image; await image.decode();
+        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+        const context = canvas.getContext('2d')!; context.drawImage(image, 0, 0);
+        const pixel = (x: number, y: number): number => {
+          const rgb = context.getImageData(Math.round(x) - frame.left, -Math.round(y) + frame.top, 1, 1).data;
+          return (rgb[0]! << 16) | (rgb[1]! << 8) | rgb[2]!;
+        };
+        samples.push({
+          phase: frame.phase, time: frame.time, x: frame.x, y: frame.y, anchor: frame.anchor, covered: frame.covered,
+          ears: [-7, 7].map(dx => pixel(Math.round(frame.x) + dx, frame.y)),
+          link: pixel(frame.x, frame.y - 14),
+          outsideLink: pixel(Math.round(frame.x) + 4, frame.y - 14),
+          bracket: pixel(Math.round(frame.x) - 16, frame.y + 16),
+        });
+      }
+      results.push({ depth, staged, samples });
+    }
+    return results;
+  });
+  for (const { staged, samples } of results) {
+    for (const sample of samples) {
+      expect(sample.ears, JSON.stringify(sample)).toEqual([staged ? 0x75f6ec : 0xffd394, staged ? 0x75f6ec : 0xffd394]);
+      expect(sample.anchor).toEqual({ x: sample.x, y: sample.y });
+      expect(sample.covered).toEqual(['0:0']);
+      if (staged) {
+        expect(sample.link).not.toBe(sample.outsideLink);
+        expect(sample.bracket).not.toBe(0x08060f);
+      }
+    }
+    expect(samples[1]!.x - samples[0]!.x).toBeGreaterThan(18);
+    expect(samples[2]!.x).toBe(samples[1]!.x);
+    expect(samples[2]!.time).toBe(samples[1]!.time);
+    expect(samples[3]!.x).toBeCloseTo(samples[0]!.x, 10);
+  }
+});
+
+test('real controls move, freeze, reverse and stage a crawler on a nested fork', async ({ page }) => {
+  await page.goto('/'); await page.locator('#start:enabled').click();
+  for (const depth of [1, 2]) {
+    await page.keyboard.press('KeyW');
+    await page.waitForFunction(depth => window.forkingHell.snapshot().depth === depth && !window.forkingHell.snapshot().transition, depth);
+  }
+  expect((await page.evaluate(() => window.forkingHell.snapshot())).covered).toContain('0:0');
+  await page.keyboard.down('ArrowRight');
+  await page.waitForFunction(() => window.forkingHell.snapshot().x >= 130);
+  await page.keyboard.up('ArrowRight'); await page.waitForTimeout(80);
+  const frozen = await page.evaluate(() => window.forkingHell.snapshot());
+  await page.waitForTimeout(150);
+  expect((await page.evaluate(() => window.forkingHell.snapshot())).time).toBe(frozen.time);
+  await page.screenshot({ path: test.info().outputPath('crawler-frozen.png') });
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForFunction(() => window.forkingHell.snapshot().x <= 110);
+  await page.keyboard.up('ArrowLeft');
+  expect((await page.evaluate(() => window.forkingHell.snapshot())).time).toBeLessThan(frozen.time);
+  await page.keyboard.down('ArrowRight');
+  await page.waitForFunction(() => window.forkingHell.snapshot().staged.includes('0:0'));
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.down('ArrowLeft');
+  await page.waitForFunction(() => window.forkingHell.snapshot().x <= 180);
+  await page.keyboard.up('ArrowLeft'); await page.waitForTimeout(300);
+  const staged = await page.evaluate(() => window.forkingHell.snapshot());
+  expect(staged.staged).toContain('0:0');
+  expect(staged.health).toBe(3);
+  await page.screenshot({ path: test.info().outputPath('crawler-staged.png') });
+});
+
 test('fork coverage uses visible pixels at viewport edges and zoom, never the padded render target', async ({ page }) => {
   test.skip(Boolean(process.env.PREVIEW_URL), 'The deterministic renderer probe is not distributed.');
   test.setTimeout(90000);

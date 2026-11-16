@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHUNK, Simulation, STEP } from '../src/simulation';
+import { CHUNK, encounters, Simulation, STEP } from '../src/simulation';
 import { firstShooter, SHOOTER_SEED } from './encounter-fixtures';
 
 const right = { move: 1, jump: false, branch: false, merge: false };
@@ -33,6 +33,44 @@ describe('immutable per-fork encounter coverage', () => {
     game.branch(); settle(game);
     expect(game.top.covered.size).toBe(0);
     expect(game.stage('0:0')).toBe(false);
+  });
+
+  describe('crawler switch contact', () => {
+    it.each([1, 2])('stages at the moving patrol position, not its old center, at fork depth %i', depth => {
+      for (const direction of [-1, 1]) {
+        const game = new Simulation(123), crawler = encounters(123, 0)[0]!;
+        for (let n = 0; n < depth; n++) { game.branch([crawler.id]); settle(game); }
+        game.time = direction * crawler.period / 4;
+        game.player.x = crawler.x;
+        game.step();
+        expect(game.top.staged.has(crawler.id)).toBe(false);
+        const position = game.pose(crawler);
+        expect(Math.abs(position.x - crawler.x)).toBeGreaterThan(18);
+        game.player.x = position.x; game.step();
+        expect(game.top.staged.has(crawler.id)).toBe(true);
+        expect(game.bursts.find(burst => burst.kind === 'stage')?.x).toBe(position.x);
+        expect(game.player.health).toBe(3);
+        expect(game.time).toBe(direction * crawler.period / 4);
+      }
+    });
+
+    it('uses the moving support height on a nested ramp and keeps an emitted stage burst at its contact origin', () => {
+      const game = new Simulation(123), crawler = encounters(123, 0)[0]!;
+      game.player.x = 224;
+      for (let n = 0; n < 2; n++) { game.branch([crawler.id]); settle(game); }
+      game.time = -crawler.period / 4;
+      const target = game.switchPose(2, crawler);
+      expect(target.y).toBe(game.surfaceAt(2, target.x).height + 15);
+      expect(target.y).toBeLessThan(game.surfaceAt(2, crawler.x).height + 15);
+      game.player.x = target.x; game.step();
+      expect(game.top.staged.has(crawler.id)).toBe(true);
+      const burst = game.bursts.find(burst => burst.kind === 'stage')!;
+      expect(burst.x).toBe(target.x);
+      for (let n = 0; n < 15; n++) game.step(right);
+      expect(game.switchPose(2, crawler).x).toBeGreaterThan(target.x);
+      expect(burst.x).toBe(target.x);
+      expect([...game.top.covered]).toEqual([crawler.id]);
+    });
   });
 
   it.each(['patrol', 'shooter'] as const)('keeps an uncovered top %s dangerous and unstageable', kind => {

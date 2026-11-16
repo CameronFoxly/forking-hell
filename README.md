@@ -34,7 +34,7 @@ The opening has wider gaps and few shooters. As you reach new ground, encounters
 | Merge down: tap once / hold to repeat | S or down arrow | Merge |
 | Pause / settings | Escape | Pause |
 
-Staging happens through character contact with a ring; there is no separate stage button. Touch supports simultaneous movement and actions, with accidental text selection suppressed on game controls. Landscape gives the graph more room; if the pixel canvas cannot fit, the game pauses and asks you to resize or rotate.
+Staging happens through character contact with a ring; there is no separate stage button. Crawler rings patrol horizontally with their corresponding enemies, freezing and reversing together with world time. Touch supports simultaneous movement and actions, with accidental text selection suppressed on game controls. Landscape gives the graph more room; if the pixel canvas cannot fit, the game pauses and asks you to resize or rotate.
 
 From the ready intro, press a typing key, Enter, Space or a left/right arrow to start, or click **Enter the graph**. The starting press is consumed until release; use a fresh press to move, jump or fork. Tab/Shift+Tab and Up/Down navigate menus rather than starting. Shortcuts, modifier-only keys and composition are left alone.
 
